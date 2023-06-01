@@ -65,7 +65,7 @@ fn main() {
     wait_for_coordinator().unwrap_or_else(|x| coordinator_process.kill().unwrap());
     std::thread::sleep(time::Duration::from_secs(1));
 
-    let json_string = std::fs::read_to_string("3_layer_topology.json").unwrap();
+    let json_string = std::fs::read_to_string("three_layer_topology.json").unwrap();
     let topology: FixedTopology = serde_json::from_str(json_string.as_str()).unwrap();
     dbg!(&topology);
 
