@@ -5,7 +5,7 @@ use std::hash::Hasher;
 use std::io::{Read, Write};
 use std::os::unix::raw::{time_t, uid_t};
 use std::process::{Child, Command, Stdio};
-use std::time;
+use std::{fs, time};
 use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
