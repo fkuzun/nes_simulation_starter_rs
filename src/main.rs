@@ -50,8 +50,22 @@ struct ConnectivityReply {
     success: bool
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WorkerConfig {
+    nodeSpatialType: String,
+    mobility: Mobilityconfig
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Mobilityconfig {
+    locationProviderConfig: String,
+    locationProviderType: String
+}
+
 fn main() {
-    let nes_build_directory = "/home/squirrel/nebulastream/cmake-build-release-s2/";
+    //let nes_build_directory = "/home/squirrel/nebulastream/cmake-build-release-s2/";
+    let nes_build_directory = "/home/x/uni/ba/clion/nebulastream/cmake-build-release-s2/";
     let coordinator_path = nes_build_directory.to_owned() + "nes-core/nesCoordinator";
     let worker_path = nes_build_directory.to_owned() + "nes-core/nesWorker";
     let mut coordinator_process = Command::new(coordinator_path)
@@ -72,6 +86,11 @@ fn main() {
     wait_for_topology(Some(1)).unwrap();
     let mut worker_processes = vec![];
     start_fixed_location_workers(&topology, 1, 0, &mut worker_processes, &worker_path);
+
+    //wait for user to press key to start mobile workers
+    println!("press any key to start mobile workers");
+    let input: String = text_io::read!("{}\n");
+    start_mobile_workers("1h_dublin_bus_nanosec", worker_path.as_str()).unwrap();
 
     //wait for user to press key to exit
     let input: String = text_io::read!("{}\n");
@@ -129,4 +148,35 @@ fn wait_for_topology(expected_node_count: Option<usize>) -> std::result::Result<
             }
         }
     }
+}
+
+fn start_mobile_workers(csv_directory: &str, worker_path: &str) -> std::result::Result<(), Box<dyn Error>>{
+    let paths = fs::read_dir(csv_directory)?;
+    let mut worker_processes = vec![];
+    for path in paths {
+        let path = path?;
+        let file_name = path.file_name();
+        println!("starting worker for vehicle {}", file_name.to_str().unwrap());
+        let abs_path = path.path();
+        let workerConfig = WorkerConfig {
+            nodeSpatialType: "MOBILE_NODE".to_owned(),
+            mobility: Mobilityconfig {
+                locationProviderType: "CSV".to_owned(),
+                locationProviderConfig: String::from(abs_path.to_str().unwrap())
+            }
+        };
+        let yaml_name  = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
+        let f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&yaml_name)?;
+        serde_yaml::to_writer(f, &workerConfig)?;
+        worker_processes.push(Command::new(worker_path)
+            //.arg("--nodeSpatialType=MOBILE_NODE")
+            .arg(format!("--configPath={}", yaml_name))
+            .spawn()
+            .expect("failed to execute coordinator"));
+
+    }
+    Ok(())
 }
