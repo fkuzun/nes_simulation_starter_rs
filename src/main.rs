@@ -64,10 +64,10 @@ struct Mobilityconfig {
 }
 
 fn main() {
-    //let nes_build_directory = "/home/squirrel/nebulastream/cmake-build-release-s2/";
-    let nes_build_directory = "/home/x/uni/ba/clion/nebulastream/cmake-build-release-s2/";
-    let coordinator_path = nes_build_directory.to_owned() + "nes-core/nesCoordinator";
-    let worker_path = nes_build_directory.to_owned() + "nes-core/nesWorker";
+    //todo: use config struct here
+    let nes_build_directory = "/home/squirrel/nes_standalone/nebulastream/build/";
+    let coordinator_path = nes_build_directory.to_owned() + "nes-coordinator/nesCoordinator";
+    let worker_path = nes_build_directory.to_owned() + "nes-worker/nesWorker";
     let mut coordinator_process = Command::new(coordinator_path)
         .arg("--restServerCorsAllowedOrigin=http://localhost:3000")
         //.stdin(Stdio::inherit()) //todo for benchmarking: what are the performance implications of keeping these open for many processes?
