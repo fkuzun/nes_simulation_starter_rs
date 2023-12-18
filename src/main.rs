@@ -83,11 +83,32 @@ struct ConnectivityReply {
     success: bool
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+enum PhysicalSourceType {
+    CSV_SOURCE
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PhysicalSourceConfiguration {
+    filePath: String,
+    skipHeader: bool
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct PhysicalSource {
+    logicalSourceName: String,
+    physicalSourceName: String,
+    #[serde(rename(deserialize = "type"))]
+    #[serde(rename(serialize = "type"))]
+    Type: PhysicalSourceType,
+    configuration: PhysicalSourceConfiguration
+}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 struct WorkerConfig {
     nodeSpatialType: String,
-    mobility: Mobilityconfig
+    mobility: Mobilityconfig,
+    physicalSources: Vec<PhysicalSource>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -130,7 +151,7 @@ fn main() {
 
 fn start_children(coordinator_process: &mut Option<Child>, worker_processes: &mut Vec<Child>, mobile_worker_processes: &mut Vec<Child>, coordinator_path: &Path, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>> {
     *coordinator_process = Some(Command::new(coordinator_path)
-        .arg("--restServerCorsAllowedOrigin=http://localhost:3000")
+        .arg("--restServerCorsAllowedOrigin=*")
         //.stdin(Stdio::inherit()) //todo for benchmarking: what are the performance implications of keeping these open for many processes?
         //.stdin(Stdio::piped()) //todo for benchmarking: what are the performance implications of keeping these open for many processes?
         .spawn()
@@ -231,6 +252,7 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
 
 fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processes: &mut Vec<Child>, shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>>{
     let paths = fs::read_dir(csv_directory)?;
+    let source_count = 1;
     for path in paths {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
@@ -239,12 +261,25 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
         let file_name = path.file_name();
         println!("starting worker for vehicle {}", file_name.to_str().unwrap());
         let abs_path = path.path();
+        let mut source_name = "default_logical".to_owned();
+        source_name.push_str(&source_count.to_string());
         let worker_config = WorkerConfig {
             nodeSpatialType: "MOBILE_NODE".to_owned(),
             mobility: Mobilityconfig {
                 locationProviderType: "CSV".to_owned(),
                 locationProviderConfig: String::from(abs_path.to_str().unwrap())
-            }
+            },
+            physicalSources: vec![
+                PhysicalSource {
+                    logicalSourceName: "default_logical".to_owned(),
+                    physicalSourceName: source_name,
+                    Type: PhysicalSourceType::CSV_SOURCE,
+                    configuration: PhysicalSourceConfiguration {
+                        filePath: "/home/user/x/sequence2.csv".to_owned(),
+                        skipHeader: true
+                    }
+                }
+            ]
         };
         let yaml_name  = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
         let f = std::fs::OpenOptions::new()
