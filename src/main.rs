@@ -108,7 +108,7 @@ fn main() {
     };
     let nes_executable_paths = NesExecutablePaths::new(simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
-    let worker_path = &nes_executable_paths.coordinator_path;
+    let worker_path = &nes_executable_paths.worker_path;
     let shutdown_triggered = Arc::new(AtomicBool::new(false));
     let mut worker_processes = vec![];
     let mut mobile_worker_processes= vec![];
