@@ -92,8 +92,8 @@ struct WorkerConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Mobilityconfig {
-    location_provider_config: String,
-    location_provider_type: String
+    locationProviderConfig: String,
+    locationProviderType: String
 }
 
 fn main() {
@@ -239,19 +239,20 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
         let file_name = path.file_name();
         println!("starting worker for vehicle {}", file_name.to_str().unwrap());
         let abs_path = path.path();
-        let workerConfig = WorkerConfig {
+        let worker_config = WorkerConfig {
             nodeSpatialType: "MOBILE_NODE".to_owned(),
             mobility: Mobilityconfig {
-                location_provider_type: "CSV".to_owned(),
-                location_provider_config: String::from(abs_path.to_str().unwrap())
+                locationProviderType: "CSV".to_owned(),
+                locationProviderConfig: String::from(abs_path.to_str().unwrap())
             }
         };
         let yaml_name  = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
         let f = std::fs::OpenOptions::new()
             .write(true)
+            .truncate(true)
             .create(true)
             .open(&yaml_name)?;
-        serde_yaml::to_writer(f, &workerConfig)?;
+        serde_yaml::to_writer(f, &worker_config)?;
         worker_processes.push(Command::new(worker_path)
             //.arg("--nodeSpatialType=MOBILE_NODE")
             .arg(format!("--configPath={}", yaml_name))

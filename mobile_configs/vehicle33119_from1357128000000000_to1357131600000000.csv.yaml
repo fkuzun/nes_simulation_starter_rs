@@ -2,3 +2,5 @@ nodeSpatialType: MOBILE_NODE
 mobility:
   locationProviderConfig: 1h_dublin_bus_nanosec/vehicle33119_from1357128000000000_to1357131600000000.csv
   locationProviderType: CSV
+
+workerId: 113
