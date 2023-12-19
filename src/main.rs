@@ -18,6 +18,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use sync::atomic;
 use yaml_rust::{YamlEmitter, YamlLoader};
+use crate::FieldType::UINT64;
 
 #[derive(Deserialize, Debug)]
 struct SimulationConfig {
@@ -118,6 +119,28 @@ struct Mobilityconfig {
     locationProviderType: String
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+enum FieldType {
+    FLOAT64,
+    UINT64
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct LogicalSourceField {
+    name: String,
+    #[serde(rename(deserialize = "type"))]
+    #[serde(rename(serialize = "type"))]
+    Type: FieldType
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct LogicalSource {
+    logicalSourceName: String,
+    fields: Vec<LogicalSourceField>
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct CoordinatorConfiguration {
+    logicalSources: Vec<LogicalSource>
+}
+
 fn main() {
     //todo: read this from file
     let nes_root_dir =  PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
@@ -151,8 +174,33 @@ fn main() {
 }
 
 fn start_children(coordinator_process: &mut Option<Child>, worker_processes: &mut Vec<Child>, mobile_worker_processes: &mut Vec<Child>, coordinator_path: &Path, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>> {
+    let coordinator_config = CoordinatorConfiguration {
+        logicalSources: vec![
+            LogicalSource {
+                logicalSourceName: "values".to_string(),
+                fields: vec![
+                    LogicalSourceField {
+                        name: "id".to_string(),
+                        Type: UINT64
+                    },
+                    LogicalSourceField {
+                        name: "value".to_string(),
+                        Type: UINT64
+                    }
+                ]
+
+            }
+        ]
+    };
+    let yaml_name  = "coordinator_config.yaml";
+    let yaml_string = serde_yaml::to_string(&coordinator_config)?;
+    let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
+    let mut after_round_trip = String::new();
+    YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
+    fs::write(&yaml_name, after_round_trip).expect("TODO: panic message");
     *coordinator_process = Some(Command::new(coordinator_path)
         .arg("--restServerCorsAllowedOrigin=*")
+        .arg(format!("--configPath={}", yaml_name))
         //.stdin(Stdio::inherit()) //todo for benchmarking: what are the performance implications of keeping these open for many processes?
         //.stdin(Stdio::piped()) //todo for benchmarking: what are the performance implications of keeping these open for many processes?
         .spawn()
@@ -262,7 +310,7 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
         let file_name = path.file_name();
         println!("starting worker for vehicle {}", file_name.to_str().unwrap());
         let abs_path = path.path();
-        let mut source_name = "default_logical".to_owned();
+        let mut source_name = "values".to_owned();
         source_name.push_str(&source_count.to_string());
         let worker_config = WorkerConfig {
             nodeSpatialType: "MOBILE_NODE".to_owned(),
@@ -272,7 +320,7 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
             },
             physicalSources: vec![
                 PhysicalSource {
-                    logicalSourceName: "default_logical".to_owned(),
+                    logicalSourceName: "values".to_owned(),
                     physicalSourceName: source_name,
                     Type: PhysicalSourceType::CSV_SOURCE,
                     configuration: PhysicalSourceConfiguration {
@@ -293,7 +341,8 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
         let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
         let mut after_round_trip = String::new();
         YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
-        fs::write(&yaml_name, yaml_string).expect("TODO: panic message");
+        //fs::write(&yaml_name, yaml_string).expect("TODO: panic message");
+        fs::write(&yaml_name, after_round_trip).expect("TODO: panic message");
         worker_processes.push(Command::new(worker_path)
             //.arg("--nodeSpatialType=MOBILE_NODE")
             .arg(format!("--configPath={}", yaml_name))
