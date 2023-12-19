@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 use sync::atomic;
+use yaml_rust::{YamlEmitter, YamlLoader};
 
 #[derive(Deserialize, Debug)]
 struct SimulationConfig {
@@ -282,12 +283,17 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
             ]
         };
         let yaml_name  = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
-        let f = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&yaml_name)?;
-        serde_yaml::to_writer(f, &worker_config)?;
+        // let f = std::fs::OpenOptions::new()
+        //     .write(true)
+        //     .truncate(true)
+        //     .create(true)
+        //     .open(&yaml_name)?;
+        //serde_yaml::to_writer(f, &worker_config)?;
+        let yaml_string = serde_yaml::to_string(&worker_config)?;
+        let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
+        let mut after_round_trip = String::new();
+        YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
+        fs::write(&yaml_name, yaml_string).expect("TODO: panic message");
         worker_processes.push(Command::new(worker_path)
             //.arg("--nodeSpatialType=MOBILE_NODE")
             .arg(format!("--configPath={}", yaml_name))

@@ -3,9 +3,9 @@ mobility:
   locationProviderConfig: 1h_dublin_bus_nanosec/vehicle33119_from1357128000000000_to1357131600000000.csv
   locationProviderType: CSV
 physicalSources:
-- logicalSourceName: '"default_logical"'
-  physicalSourceName: '"default_logical1"'
+- logicalSourceName: default_logical
+  physicalSourceName: default_logical1
   type: CSV_SOURCE
   configuration:
-    filePath: '"/home/user/x/sequence2.csv"'
+    filePath: /home/user/x/sequence2.csv
     skipHeader: true
