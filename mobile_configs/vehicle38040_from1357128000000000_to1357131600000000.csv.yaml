@@ -10,4 +10,7 @@ physicalSources:
     configuration:
       filePath: /home/x/sequence2.csv
       skipHeader: true
-workerId: 115
+      sourceGatheringInterval: 1000
+      numberOfTuplesToProducePerBuffer: 10
+      numberOfBuffersToProduce: 1000
+workerId: 119

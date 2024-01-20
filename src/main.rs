@@ -93,7 +93,10 @@ enum PhysicalSourceType {
 #[derive(Debug, Serialize, Deserialize)]
 struct PhysicalSourceConfiguration {
     filePath: String,
-    skipHeader: bool
+    skipHeader: bool,
+    sourceGatheringInterval: u64, //in millisec
+    numberOfTuplesToProducePerBuffer: u64,
+    numberOfBuffersToProduce: u64
 }
 #[derive(Debug, Serialize, Deserialize)]
 struct PhysicalSource {
@@ -325,7 +328,10 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
                     Type: PhysicalSourceType::CSV_SOURCE,
                     configuration: PhysicalSourceConfiguration {
                         filePath: "/home/x/sequence2.csv".to_owned(),
-                        skipHeader: true
+                        skipHeader: true,
+                        sourceGatheringInterval: 1000,
+                        numberOfTuplesToProducePerBuffer: 10,
+                        numberOfBuffersToProduce: 1000
                     }
                 }
             ]
