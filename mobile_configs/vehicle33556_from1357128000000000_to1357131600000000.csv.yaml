@@ -8,6 +8,6 @@ physicalSources:
     physicalSourceName: values1
     type: CSV_SOURCE
     configuration:
-      filePath: /home/user/x/sequence2.csv
+      filePath: /home/x/sequence2.csv
       skipHeader: true
-workerId: 121
+workerId: 122

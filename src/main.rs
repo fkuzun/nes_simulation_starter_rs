@@ -324,7 +324,7 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
                     physicalSourceName: source_name,
                     Type: PhysicalSourceType::CSV_SOURCE,
                     configuration: PhysicalSourceConfiguration {
-                        filePath: "/home/user/x/sequence2.csv".to_owned(),
+                        filePath: "/home/x/sequence2.csv".to_owned(),
                         skipHeader: true
                     }
                 }
