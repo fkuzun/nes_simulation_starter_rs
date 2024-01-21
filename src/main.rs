@@ -109,9 +109,14 @@ struct PhysicalSource {
 }
 
 
+//todo: also add the coordinator port
 #[derive(Debug, Serialize, Deserialize)]
 struct WorkerConfig {
+    rpcPort: u16,
+    dataPort: u16,
     nodeSpatialType: String,
+    fieldNodeLocationCoordinates: (f64, f64),
+    parentId: u64,
     mobility: Mobilityconfig,
     physicalSources: Vec<PhysicalSource>
 }
@@ -218,13 +223,15 @@ fn start_children(coordinator_process: &mut Option<Child>, worker_processes: &mu
     let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
     dbg!(&topology);
 
+    let mut next_free_port = 4000;
+
     wait_for_topology(Some(1), Arc::clone(&shutdown_triggered))?;
-    start_fixed_location_workers(&topology, 1, 0, worker_processes, &worker_path, Arc::clone(&shutdown_triggered))?;
+    start_fixed_location_workers(&topology, 1, 0, worker_processes, &worker_path, Arc::clone(&shutdown_triggered), &mut next_free_port)?;
 
     //wait for user to press key to start mobile workers
     println!("press any key to start mobile workers");
     let input: String = text_io::read!("{}\n");
-    start_mobile_workers("1h_dublin_bus_nanosec", worker_path, mobile_worker_processes, Arc::clone(&shutdown_triggered))
+    start_mobile_workers("1h_dublin_bus_nanosec", worker_path, mobile_worker_processes, Arc::clone(&shutdown_triggered), &mut next_free_port)
 }
 
 fn kill_children(coordinator_process: &mut Option<Child>, worker_processes: &mut Vec<Child>, mobile_worker_processes: &mut Vec<Child>) {
@@ -245,7 +252,7 @@ fn kill_children(coordinator_process: &mut Option<Child>, worker_processes: &mut
     //println!("{}", exit_status.success());
 }
 
-fn start_fixed_location_workers(topology: &FixedTopology, actual_parent_id: usize, input_id: usize, worker_prcesses: &mut Vec<Child>, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>> {
+fn start_fixed_location_workers(topology: &FixedTopology, actual_parent_id: usize, input_id: usize, worker_prcesses: &mut Vec<Child>, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16) -> std::result::Result<(), Box<dyn Error>> {
     if shutdown_triggered.load(Ordering::SeqCst) {
         return Err(String::from("Shutdown triggered").into());
     }
@@ -259,7 +266,7 @@ fn start_fixed_location_workers(topology: &FixedTopology, actual_parent_id: usiz
     //todo: re rely on the system always assigning ids one higher
     wait_for_topology(Some(system_id), Arc::clone(&shutdown_triggered));
     for child in topology.children.get(&input_id).ok_or("could not find child array")? {
-        start_fixed_location_workers(topology, system_id, child.to_owned(), worker_prcesses, worker_path, Arc::clone(&shutdown_triggered))?;
+        start_fixed_location_workers(topology, system_id, child.to_owned(), worker_prcesses, worker_path, Arc::clone(&shutdown_triggered), next_free_port)?;
     }
     Ok(())
 }
@@ -302,7 +309,7 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
     }
 }
 
-fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processes: &mut Vec<Child>, shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>>{
+fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processes: &mut Vec<Child>, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16) -> std::result::Result<(), Box<dyn Error>>{
     let paths = fs::read_dir(csv_directory)?;
     let source_count = 1;
     for path in paths {
@@ -316,7 +323,11 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
         let mut source_name = "values".to_owned();
         source_name.push_str(&source_count.to_string());
         let worker_config = WorkerConfig {
+            rpcPort: *next_free_port,
+            dataPort: *next_free_port + 1,
             nodeSpatialType: "MOBILE_NODE".to_owned(),
+            fieldNodeLocationCoordinates: (0.0, 0.0),
+            parentId: 0,
             mobility: Mobilityconfig {
                 locationProviderType: "CSV".to_owned(),
                 locationProviderConfig: String::from(abs_path.to_str().unwrap())
@@ -336,6 +347,7 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
                 }
             ]
         };
+        *next_free_port += 2;
         let yaml_name  = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
         // let f = std::fs::OpenOptions::new()
         //     .write(true)
