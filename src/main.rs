@@ -45,44 +45,45 @@ impl NesExecutablePaths {
         }
     }
 }
+
 #[derive(Deserialize, Debug)]
 struct FixedTopology {
     //todo: check if we can just make that a tuple
     nodes: HashMap<usize, Vec<f64>>,
-    children: HashMap<usize, Vec<usize>>
+    children: HashMap<usize, Vec<usize>>,
 }
 
 #[derive(Deserialize, Debug)]
 struct ActualTopology {
     edges: Vec<Edge>,
-    nodes: Vec<ActualNode>
+    nodes: Vec<ActualNode>,
 }
 
 #[derive(Deserialize, Debug)]
 struct ActualNode {
-available_resources: usize,
+    available_resources: usize,
     id: usize,
     ip_address: String,
     location: Option<Location>,
-    nodeType: String
+    nodeType: String,
 }
 
 #[derive(Deserialize, Debug)]
 struct Location {
     latitude: f64,
-    longitude: f64
+    longitude: f64,
 }
 
 #[derive(Deserialize, Debug)]
 struct Edge {
     source: usize,
-    target: usize
+    target: usize,
 }
 
 #[derive(Deserialize, Debug)]
 struct ConnectivityReply {
     statusCode: usize,
-    success: bool
+    success: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -94,10 +95,12 @@ enum PhysicalSourceType {
 struct PhysicalSourceConfiguration {
     filePath: String,
     skipHeader: bool,
-    sourceGatheringInterval: u64, //in millisec
+    sourceGatheringInterval: u64,
+    //in millisec
     numberOfTuplesToProducePerBuffer: u64,
-    numberOfBuffersToProduce: u64
+    numberOfBuffersToProduce: u64,
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 struct PhysicalSource {
     logicalSourceName: String,
@@ -105,7 +108,7 @@ struct PhysicalSource {
     #[serde(rename(deserialize = "type"))]
     #[serde(rename(serialize = "type"))]
     Type: PhysicalSourceType,
-    configuration: PhysicalSourceConfiguration
+    configuration: PhysicalSourceConfiguration,
 }
 
 
@@ -115,56 +118,67 @@ struct WorkerConfig {
     rpcPort: u16,
     dataPort: u16,
     nodeSpatialType: String,
-    fieldNodeLocationCoordinates: (f64, f64),
-    parentId: u64,
     mobility: Mobilityconfig,
-    physicalSources: Vec<PhysicalSource>
+    physicalSources: Vec<PhysicalSource>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FixedWorkerConfig {
+    rpcPort: u16,
+    dataPort: u16,
+    parentId: u16,
+    nodeSpatialType: String,
+    fieldNodeLocationCoordinates: String,
+    //fieldNodeLocationCoordinates: (f64, f64),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Mobilityconfig {
     locationProviderConfig: String,
-    locationProviderType: String
+    locationProviderType: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 enum FieldType {
     FLOAT64,
-    UINT64
+    UINT64,
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 struct LogicalSourceField {
     name: String,
     #[serde(rename(deserialize = "type"))]
     #[serde(rename(serialize = "type"))]
-    Type: FieldType
+    Type: FieldType,
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 struct LogicalSource {
     logicalSourceName: String,
-    fields: Vec<LogicalSourceField>
+    fields: Vec<LogicalSourceField>,
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 struct CoordinatorConfiguration {
-    logicalSources: Vec<LogicalSource>
+    logicalSources: Vec<LogicalSource>,
 }
 
 fn main() {
     //todo: read this from file
-    let nes_root_dir =  PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
+    let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
-    let simulation_config =  SimulationConfig {
+    let simulation_config = SimulationConfig {
         nes_root_dir,
         relative_worker_path,
-        relative_coordinator_path
+        relative_coordinator_path,
     };
     let nes_executable_paths = NesExecutablePaths::new(simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
     let worker_path = &nes_executable_paths.worker_path;
     let shutdown_triggered = Arc::new(AtomicBool::new(false));
     let mut worker_processes = vec![];
-    let mut mobile_worker_processes= vec![];
+    let mut mobile_worker_processes = vec![];
     let mut coordinator_process = None;
     let s = Arc::clone(&shutdown_triggered);
     ctrlc::set_handler(move || {
@@ -189,18 +203,17 @@ fn start_children(coordinator_process: &mut Option<Child>, worker_processes: &mu
                 fields: vec![
                     LogicalSourceField {
                         name: "id".to_string(),
-                        Type: UINT64
+                        Type: UINT64,
                     },
                     LogicalSourceField {
                         name: "value".to_string(),
-                        Type: UINT64
-                    }
-                ]
-
+                        Type: UINT64,
+                    },
+                ],
             }
         ]
     };
-    let yaml_name  = "coordinator_config.yaml";
+    let yaml_name = "coordinator_config.yaml";
     let yaml_string = serde_yaml::to_string(&coordinator_config)?;
     let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
     let mut after_round_trip = String::new();
@@ -223,10 +236,11 @@ fn start_children(coordinator_process: &mut Option<Child>, worker_processes: &mu
     let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
     dbg!(&topology);
 
-    let mut next_free_port = 4000;
+    let mut next_free_port = 5000;
+    let mut id_count = 1;
 
     wait_for_topology(Some(1), Arc::clone(&shutdown_triggered))?;
-    start_fixed_location_workers(&topology, 1, 0, worker_processes, &worker_path, Arc::clone(&shutdown_triggered), &mut next_free_port)?;
+    start_fixed_location_workers(&topology, 1, 0, worker_processes, &worker_path, Arc::clone(&shutdown_triggered), &mut next_free_port, &mut id_count)?;
 
     //wait for user to press key to start mobile workers
     println!("press any key to start mobile workers");
@@ -252,21 +266,38 @@ fn kill_children(coordinator_process: &mut Option<Child>, worker_processes: &mut
     //println!("{}", exit_status.success());
 }
 
-fn start_fixed_location_workers(topology: &FixedTopology, actual_parent_id: usize, input_id: usize, worker_prcesses: &mut Vec<Child>, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16) -> std::result::Result<(), Box<dyn Error>> {
+//the id does currently not correspond to the actual worker id
+fn start_fixed_location_workers(topology: &FixedTopology, actual_parent_id: usize, input_id: usize, worker_prcesses: &mut Vec<Child>, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16, id: &mut u64) -> std::result::Result<(), Box<dyn Error>> {
     if shutdown_triggered.load(Ordering::SeqCst) {
         return Err(String::from("Shutdown triggered").into());
     }
-     let system_id = wait_for_topology(None, Arc::clone(&shutdown_triggered))? + 1;
-     let location = topology.nodes.get(&input_id).ok_or(format!("could not find node with id {}", system_id))?;
-     worker_prcesses.push(Command::new(worker_path)
-             .arg(format!("--fieldNodeLocationCoordinates={},{}", location[0], location[1]))
-             .arg("--nodeSpatialType=FIXED_LOCATION")
-             .arg(format!("--parentId={}", actual_parent_id))
-             .spawn()?);
+    let system_id = wait_for_topology(None, Arc::clone(&shutdown_triggered))? + 1;
+    let location = topology.nodes.get(&input_id).ok_or(format!("could not find node with id {}", system_id))?;
+    let worker_config = FixedWorkerConfig {
+        rpcPort: *next_free_port,
+        dataPort: *next_free_port + 1,
+        parentId: actual_parent_id.try_into()?,
+        nodeSpatialType: "FIXED_LOCATION".to_string(),
+        fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
+    };
+    let yaml_name = format!("fixed_worker_configs/fixed_worker{}.yaml", id);
+    let yaml_string = serde_yaml::to_string(&worker_config)?;
+    let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
+    let mut after_round_trip = String::new();
+    YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
+    fs::write(&yaml_name, after_round_trip).expect("TODO: panic message");
+    worker_prcesses.push(Command::new(worker_path)
+        //.arg(format!("--fieldNodeLocationCoordinates={},{}", location[0], location[1]))
+        //.arg("--nodeSpatialType=FIXED_LOCATION")
+        //.arg(format!("--parentId={}", actual_parent_id))
+        .arg(format!("--configPath={}", yaml_name))
+        .spawn()?);
     //todo: re rely on the system always assigning ids one higher
     wait_for_topology(Some(system_id), Arc::clone(&shutdown_triggered));
+    *id += 1;
+    *next_free_port += 2;
     for child in topology.children.get(&input_id).ok_or("could not find child array")? {
-        start_fixed_location_workers(topology, system_id, child.to_owned(), worker_prcesses, worker_path, Arc::clone(&shutdown_triggered), next_free_port)?;
+        start_fixed_location_workers(topology, system_id, child.to_owned(), worker_prcesses, worker_path, Arc::clone(&shutdown_triggered), next_free_port, id)?;
     }
     Ok(())
 }
@@ -279,7 +310,7 @@ fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Res
         if let Ok(reply) = reqwest::blocking::get("http://127.0.0.1:8081/v1/nes/connectivity/check") {
             if reply.json::<ConnectivityReply>().unwrap().success {
                 println!("Coordinator has connected");
-                break Ok(())
+                break Ok(());
             }
             let input: String = text_io::read!("{}\n");
             std::thread::sleep(time::Duration::from_secs(1));
@@ -298,18 +329,18 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
             println!("topology contains {} nodes", size);
             if let Some(expected) = expected_node_count {
                 if size == expected {
-                    break Ok(size)
+                    break Ok(size);
                 }
                 println!("number of nodes not reached");
                 std::thread::sleep(time::Duration::from_secs(1));
             } else {
-                break Ok(size)
+                break Ok(size);
             }
         }
     }
 }
 
-fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processes: &mut Vec<Child>, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16) -> std::result::Result<(), Box<dyn Error>>{
+fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processes: &mut Vec<Child>, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16) -> std::result::Result<(), Box<dyn Error>> {
     let paths = fs::read_dir(csv_directory)?;
     let source_count = 1;
     for path in paths {
@@ -326,11 +357,9 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
             rpcPort: *next_free_port,
             dataPort: *next_free_port + 1,
             nodeSpatialType: "MOBILE_NODE".to_owned(),
-            fieldNodeLocationCoordinates: (0.0, 0.0),
-            parentId: 0,
             mobility: Mobilityconfig {
                 locationProviderType: "CSV".to_owned(),
-                locationProviderConfig: String::from(abs_path.to_str().unwrap())
+                locationProviderConfig: String::from(abs_path.to_str().unwrap()),
             },
             physicalSources: vec![
                 PhysicalSource {
@@ -342,13 +371,13 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
                         skipHeader: true,
                         sourceGatheringInterval: 1000,
                         numberOfTuplesToProducePerBuffer: 10,
-                        numberOfBuffersToProduce: 1000
-                    }
+                        numberOfBuffersToProduce: 1000,
+                    },
                 }
-            ]
+            ],
         };
         *next_free_port += 2;
-        let yaml_name  = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
+        let yaml_name = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
         // let f = std::fs::OpenOptions::new()
         //     .write(true)
         //     .truncate(true)
@@ -366,7 +395,6 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
             .arg(format!("--configPath={}", yaml_name))
             .spawn()
             .expect("failed to execute coordinator"));
-
     }
     Ok(())
 }

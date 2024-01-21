@@ -1,4 +1,6 @@
 ---
+rpcPort: 5226
+dataPort: 5227
 nodeSpatialType: MOBILE_NODE
 mobility:
   locationProviderConfig: 1h_dublin_bus_nanosec/vehicle33158_from1357128000000000_to1357131600000000.csv
@@ -13,4 +15,4 @@ physicalSources:
       sourceGatheringInterval: 1000
       numberOfTuplesToProducePerBuffer: 10
       numberOfBuffersToProduce: 1000
-workerId: 114
+workerId: 122

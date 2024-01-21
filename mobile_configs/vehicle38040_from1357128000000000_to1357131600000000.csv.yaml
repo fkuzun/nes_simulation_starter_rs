@@ -1,4 +1,6 @@
 ---
+rpcPort: 5234
+dataPort: 5235
 nodeSpatialType: MOBILE_NODE
 mobility:
   locationProviderConfig: 1h_dublin_bus_nanosec/vehicle38040_from1357128000000000_to1357131600000000.csv
