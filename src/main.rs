@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use std::os::unix::raw::{time_t, uid_t};
 use std::process::{Child, Command, Stdio};
 use std::{fs, sync, time};
+use std::fs::File;
 use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -17,16 +18,27 @@ use std::thread::sleep;
 use std::time::Duration;
 use sync::atomic;
 use nes_tools::launch::Launch;
-use nes_tools::topology::AddEdgeRequest;
+use nes_tools::topology::{AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType};
 use yaml_rust::{YamlEmitter, YamlLoader};
 use crate::FieldType::UINT64;
 use crate::WorkerConfigType::Fixed;
+
+const input_folder_sub_path: &'static str = "nes_experiment_input";
 
 #[derive(Deserialize, Debug)]
 struct SimulationConfig {
     nes_root_dir: PathBuf,
     relative_worker_path: PathBuf,
     relative_coordinator_path: PathBuf,
+    experiment_directory: PathBuf,
+}
+
+impl SimulationConfig {
+    fn get_input_folder_path(&self) -> PathBuf {
+        let mut path = self.experiment_directory.clone();
+        path.push(input_folder_sub_path.into());
+        path
+    }
 }
 
 
@@ -47,6 +59,34 @@ impl NesExecutablePaths {
         }
     }
 }
+
+
+#[derive(Debug, Deserialize)]
+struct Parameters {
+    speedup_factor: f64,
+    runtime: u32,
+    cooldown_time: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct DefaultSourceInput {
+    tuples_per_buffer: usize,
+    gathering_interval: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct Paths {
+    fixed_topology_nodes: String,
+    mobile_trajectories_directory: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    parameters: Parameters,
+    default_source_input: DefaultSourceInput,
+    paths: Paths,
+}
+
 
 #[derive(Deserialize, Debug)]
 struct FixedTopology {
@@ -219,10 +259,12 @@ fn main() {
     let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
+    let experiment_directory = PathBuf::from("/home/x/uni/ba/experiments");
     let simulation_config = SimulationConfig {
         nes_root_dir,
         relative_worker_path,
         relative_coordinator_path,
+        experiment_directory
     };
     let nes_executable_paths = NesExecutablePaths::new(simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
@@ -296,7 +338,16 @@ fn start_children(coordinator_process: &mut Option<Child>, worker_processes: &mu
     //wait for user to press key to start mobile workers
     println!("press any key to start mobile workers");
     let input: String = text_io::read!("{}\n");
-    start_mobile_workers("1h_dublin_bus_nanosec", worker_path, mobile_worker_processes, Arc::clone(&shutdown_triggered), &mut next_free_port)
+    start_mobile_workers("1h_dublin_bus_nanosec", worker_path, mobile_worker_processes, Arc::clone(&shutdown_triggered), &mut next_free_port);
+
+    let execute_query_request = ExecuteQueryRequest {
+        user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
+        placement: PlacementStrategyType::BottomUp,
+    };
+    let client = reqwest::blocking::Client::new();
+    let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-query")
+        .json(&execute_query_request).send()?;
+    return Ok(());
 }
 
 fn kill_children(coordinator_process: &mut Option<Child>, worker_processes: &mut HashMap<u64, ProvisionalWorkerHandle>, mobile_worker_processes: &mut Vec<Child>) {
@@ -371,8 +422,7 @@ fn start_fixed_location_workers(topology: &FixedTopology, worker_prcesses: &mut 
                 child_id,
             };
             let result = client.post("http://127.0.0.1:8081/v1/nes/topology/addAsChild")
-                //.body(serde_json::to_string(&link_request)?).send().await?;
-            .json(&link_request).send()?;
+                .json(&link_request).send()?;
         }
     }
     Ok(())
@@ -474,3 +524,54 @@ fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processe
     }
     Ok(())
 }
+
+fn create_csv_file(file_path: &str, id: u32, num_rows: usize) -> Result<(), Box<dyn Error>> {
+    // Create or open the CSV file
+    let mut file = File::create(file_path)?;
+
+    // Create a CSV writer
+    let mut csv_writer = csv::WriterBuilder::new()
+        .has_headers(false)
+        .from_writer(file);
+
+    // Write rows to the CSV file
+    for sequence_number in 0..num_rows {
+        // Write the id and sequence number to the CSV file
+        csv_writer.write_record(&[id.to_string(), sequence_number.to_string()])?;
+    }
+
+    // Flush the CSV writer to ensure all data is written to the file
+    csv_writer.flush()?;
+
+    Ok(())
+}
+
+
+fn create_input_data(
+    directory_path: &str,
+    id: u32,
+    num_buffers: usize,
+    tuples_per_buffer: usize,
+) -> Result<(), Box<dyn Error>> {
+    // Create the directory if it doesn't exist
+    fs::create_dir_all(directory_path)?;
+
+    let file_name = format!("source_input{}.csv", id);
+
+
+    // Construct the full file path
+    let file_path = Path::new(directory_path).join(&file_name);
+
+    // Calculate the number of rows based on the experiment runtime, gathering interval, and tuples per buffer
+    let num_rows = tuples_per_buffer * num_buffers;
+
+    // Call the create_csv_file function to generate the CSV file
+    create_csv_file(file_path.to_str().ok_or("Error getting file string")?, id, num_rows)?;
+
+    println!("Input file created: {}", file_path.display());
+
+    Ok(())
+}
+
+fn create_sequential_source_config()
+//let num_rows = (experiment_runtime / gathering_interval) as usize * tuples_per_buffer * num_buffers;
