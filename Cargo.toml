@@ -16,3 +16,6 @@ text_io = "0.1.12"
 yaml-rust = "0.4.5"
 nes_tools = {path = "../nes_tools"}
 csv = "1.3.0"
+toml = "0.8.8"
+chrono = "0.4.32"
+serde_with = { version = "3.5.1", features = ["chrono_0_4"] }
