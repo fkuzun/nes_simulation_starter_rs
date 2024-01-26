@@ -7,6 +7,7 @@ use std::os::unix::raw::{time_t, uid_t};
 use std::process::{Child, Command, Stdio};
 use std::{fs, sync, time};
 use std::fs::{File, read_to_string};
+use std::ops::Sub;
 use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -65,6 +66,11 @@ impl SimulationConfig {
     fn generate_experiment_configs(&self) -> Result<ExperimentSetup, Box<dyn Error>> {
         let generated_folder = self.create_generated_folder();
         let input_config = self.read_input_config();
+        let input_config_copy_path = generated_folder.join("input_config_copy.toml");
+        let toml_string = toml::to_string(&input_config)?;
+        let mut file = File::create(input_config_copy_path)?;
+        file.write_all(toml_string.as_bytes())?;
+
         input_config.generate_output_config(&generated_folder)
     }
 }
@@ -90,29 +96,30 @@ impl NesExecutablePaths {
 
 
 #[serde_as]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct Parameters {
     speedup_factor: f64,
     #[serde_as(as = "DurationSeconds<u64>")]
     runtime: Duration,
-    cooldown_time: u32,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    cooldown_time: Duration,
 }
 
 #[serde_as]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct DefaultSourceInput {
     tuples_per_buffer: usize,
     #[serde_as(as = "DurationMilliSeconds<u64>")]
     gathering_interval: Duration,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct Paths {
     fixed_topology_nodes: String,
     mobile_trajectories_directory: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct InputConfig {
     parameters: Parameters,
     default_source_input: DefaultSourceInput,
@@ -123,6 +130,7 @@ struct ExperimentSetup {
     output_config_directory: PathBuf,
     output_source_input_directory: PathBuf,
     output_trajectory_directory: PathBuf,
+    sink_output_path: PathBuf,
     //output_worker_config_directory: PathBuf,
     fixed_config_paths: Vec<PathBuf>,
     mobile_config_paths: Vec<PathBuf>,
@@ -144,15 +152,17 @@ impl ExperimentSetup {
         self.add_edges()?;
 
         //wait for user to press key to start mobile workers
-        println!("press any key to start mobile workers");
-        let input: String = text_io::read!("{}\n");
+        // println!("press any key to start mobile workers");
+        // let input: String = text_io::read!("{}\n");
 
 
         self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered))?;
 
+        sleep(Duration::from_secs(2));
 
         let execute_query_request = ExecuteQueryRequest {
-            user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
+            //user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
+            user_query: format!("Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
             placement: PlacementStrategyType::BottomUp,
         };
         let client = reqwest::blocking::Client::new();
@@ -306,9 +316,14 @@ impl InputConfig {
         let output_worker_config_directory = output_config_directory.join("worker_config");
         fs::create_dir_all(&output_worker_config_directory).expect("Failed to create folder");
         let output_coordinator_config_path = output_config_directory.join("coordinator_config.yaml");
+        let sink_output_path = generated_folder.join("out.csv");
+
+
+
 
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
+            enableQueryReconfiguration: true,
             logicalSources: vec![
                 LogicalSource {
                     logicalSourceName: "values".to_string(),
@@ -319,6 +334,10 @@ impl InputConfig {
                         },
                         LogicalSourceField {
                             name: "value".to_string(),
+                            Type: UINT64,
+                        },
+                        LogicalSourceField {
+                            name: "input_timestamp".to_string(),
                             Type: UINT64,
                         },
                     ],
@@ -369,8 +388,13 @@ impl InputConfig {
                 .has_headers(false)
                 .from_path(&output_trajectory_path).unwrap();
 
-            for point in waypoints {
+            for mut point in waypoints {
+                point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
                 //todo: multiply speed
+                if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
+                    println!("skip waypoint");
+                    break
+                }
                 csv_writer.serialize(point).unwrap();
             }
 
@@ -395,9 +419,9 @@ impl InputConfig {
                         configuration: PhysicalSourceConfiguration {
                             filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
                             skipHeader: true,
-                            sourceGatheringInterval: 1000,
-                            numberOfTuplesToProducePerBuffer: 10,
-                            numberOfBuffersToProduce: 1000,
+                            sourceGatheringInterval: self.default_source_input.gathering_interval,
+                            numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
+                            //numberOfBuffersToProduce: num_buffers.try_into()?,
                         },
                     }
                 ],
@@ -421,6 +445,7 @@ impl InputConfig {
             output_source_input_directory,
             output_trajectory_directory,
             //output_worker_config_directory,
+            sink_output_path,
             fixed_config_paths,
             mobile_config_paths,
             output_coordinator_config_path,
@@ -490,14 +515,16 @@ enum PhysicalSourceType {
     CSV_SOURCE
 }
 
+#[serde_as]
 #[derive(Debug, Serialize, Deserialize)]
 struct PhysicalSourceConfiguration {
     filePath: String,
     skipHeader: bool,
-    sourceGatheringInterval: u64,
+    #[serde_as(as = "DurationMilliSeconds<u64>")]
+    sourceGatheringInterval: Duration,
     //in millisec
     numberOfTuplesToProducePerBuffer: u64,
-    numberOfBuffersToProduce: u64,
+    //numberOfBuffersToProduce: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -560,6 +587,7 @@ struct LogicalSource {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CoordinatorConfiguration {
+    enableQueryReconfiguration: bool,
     logicalSources: Vec<LogicalSource>,
 }
 
