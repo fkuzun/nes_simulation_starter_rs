@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::format;
 use std::hash::Hasher;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::raw::{time_t, uid_t};
 use std::process::{Child, Command, Stdio};
-use std::{fs, sync, time};
+use std::{fs, io, sync, time};
 use std::fs::{File, read_to_string};
-use std::ops::Sub;
+use std::ops::{Add, Sub};
 use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use sync::atomic;
 use chrono::Local;
 use nes_tools::launch::Launch;
@@ -96,8 +96,9 @@ impl NesExecutablePaths {
 
 
 #[serde_as]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct Parameters {
+    enable_query_reconfiguration: bool,
     speedup_factor: f64,
     #[serde_as(as = "DurationSeconds<u64>")]
     runtime: Duration,
@@ -106,20 +107,20 @@ struct Parameters {
 }
 
 #[serde_as]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct DefaultSourceInput {
     tuples_per_buffer: usize,
     #[serde_as(as = "DurationMilliSeconds<u64>")]
     gathering_interval: Duration,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct Paths {
     fixed_topology_nodes: String,
     mobile_trajectories_directory: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct InputConfig {
     parameters: Parameters,
     default_source_input: DefaultSourceInput,
@@ -138,7 +139,9 @@ struct ExperimentSetup {
     coordinator_process: Option<Child>,
     mobile_worker_processes: Vec<Child>,
     fixed_worker_processes: Vec<Child>,
-    edges: Vec<(u64, u64)>
+    edges: Vec<(u64, u64)>,
+    input_config: InputConfig,
+    total_number_of_tuples_to_ingest: u64
 }
 
 impl ExperimentSetup {
@@ -162,7 +165,8 @@ impl ExperimentSetup {
 
         let execute_query_request = ExecuteQueryRequest {
             //user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
-            user_query: format!("Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
+            //user_query: format!("Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
+            user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
             placement: PlacementStrategyType::BottomUp,
         };
         let client = reqwest::blocking::Client::new();
@@ -323,7 +327,7 @@ impl InputConfig {
 
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
-            enableQueryReconfiguration: true,
+            enableQueryReconfiguration: self.parameters.enable_query_reconfiguration,
             logicalSources: vec![
                 LogicalSource {
                     logicalSourceName: "values".to_string(),
@@ -358,6 +362,7 @@ impl InputConfig {
             let worker_config = FixedWorkerConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
+                numberOfSlots: 1,
                 nodeSpatialType: "FIXED_LOCATION".to_string(),
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: id,
@@ -371,6 +376,7 @@ impl InputConfig {
         }
 
 
+        let mut total_number_of_tuples_to_ingest = 0;
         let mut mobile_config_paths = vec![];
         let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
         for mobile_trajectory_file in fs::read_dir(input_trajectories_directory)? {
@@ -405,6 +411,7 @@ impl InputConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
                 workerId: id,
+                numberOfSlots: 1,
                 nodeSpatialType: "MOBILE_NODE".to_owned(),
                 mobility: Mobilityconfig {
                     locationProviderType: "CSV".to_owned(),
@@ -418,7 +425,7 @@ impl InputConfig {
                         Type: PhysicalSourceType::CSV_SOURCE,
                         configuration: PhysicalSourceConfiguration {
                             filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
-                            skipHeader: true,
+                            skipHeader: false,
                             sourceGatheringInterval: self.default_source_input.gathering_interval,
                             numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
                             //numberOfBuffersToProduce: num_buffers.try_into()?,
@@ -431,6 +438,8 @@ impl InputConfig {
             mobile_config_paths.push(yaml_path);
             id += 1;
             next_free_port += 2;
+            let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
+            total_number_of_tuples_to_ingest += num_tuples;
         };
 
         let mut edges = vec![];
@@ -453,6 +462,8 @@ impl InputConfig {
             mobile_worker_processes: vec![],
             fixed_worker_processes: vec![],
             edges,
+            total_number_of_tuples_to_ingest,
+            input_config: self.clone()
         })
     }
 }
@@ -544,6 +555,7 @@ struct MobileWorkerConfig {
     rpcPort: u16,
     dataPort: u16,
     workerId: u64,
+    numberOfSlots: u16,
     nodeSpatialType: String,
     mobility: Mobilityconfig,
     physicalSources: Vec<PhysicalSource>,
@@ -553,6 +565,7 @@ struct MobileWorkerConfig {
 struct FixedWorkerConfig {
     rpcPort: u16,
     dataPort: u16,
+    numberOfSlots: u16,
     nodeSpatialType: String,
     fieldNodeLocationCoordinates: String,
     workerId: u64,
@@ -682,14 +695,51 @@ fn main() {
         s.store(true, Ordering::SeqCst);
     }).expect("TODO: panic message");
     //if let Ok(_) = start_children(&mut coordinator_process, &mut worker_processes, &mut mobile_worker_processes, coordinator_path, worker_path, Arc::clone(&shutdown_triggered)) {
+    let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
+    let experiment_start = SystemTime::now();
     if let Ok(_) = experiment.start(nes_executable_paths, Arc::clone(&shutdown_triggered)) {
         //wait for user to press ctrl c to exit
         while !shutdown_triggered.load(Ordering::SeqCst) {
+
+            let current_time = SystemTime::now();
+            if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                if elapsed_time > experiment_duration {
+                    break
+                }
+            }
             sleep(Duration::from_secs(1));
         }
     }
 
+    let desired_line_count = experiment.total_number_of_tuples_to_ingest;
+
+    loop {
+        // Check the file periodically
+        let line_count = count_lines_in_file(experiment.sink_output_path.as_path()).unwrap();
+        println!("Current line count: {} of {}", line_count, desired_line_count);
+
+        // Check if the desired line count is reached
+        if line_count >= desired_line_count.try_into().unwrap() {
+            println!("Desired line count reached!");
+            break;
+        }
+
+        // Wait for some time before checking again
+        sleep(Duration::from_secs(10)); // Wait for 10 seconds before checking again
+    }
+
+
     experiment.kill_processes().unwrap();
+}
+
+fn count_lines_in_file(file_path: &Path) -> io::Result<usize> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let mut line_count = 0;
+    for _line in reader.lines() {
+        line_count += 1;
+    }
+    Ok(line_count)
 }
 
 fn create_folder_with_timestamp(mut path: PathBuf, prefix: &str) -> PathBuf {
