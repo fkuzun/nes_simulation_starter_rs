@@ -7,6 +7,7 @@ use std::os::unix::raw::{time_t, uid_t};
 use std::process::{Child, Command, Stdio};
 use std::{fs, io, sync, time};
 use std::fs::{File, read_to_string};
+use std::net::TcpListener;
 use std::ops::{Add, Sub};
 use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use sync::atomic;
@@ -132,6 +134,7 @@ struct ExperimentSetup {
     output_source_input_directory: PathBuf,
     output_trajectory_directory: PathBuf,
     sink_output_path: PathBuf,
+    experiment_output_path: PathBuf,
     //output_worker_config_directory: PathBuf,
     fixed_config_paths: Vec<PathBuf>,
     mobile_config_paths: Vec<PathBuf>,
@@ -320,7 +323,10 @@ impl InputConfig {
         let output_worker_config_directory = output_config_directory.join("worker_config");
         fs::create_dir_all(&output_worker_config_directory).expect("Failed to create folder");
         let output_coordinator_config_path = output_config_directory.join("coordinator_config.yaml");
-        let sink_output_path = generated_folder.join("out.csv");
+        //let sink_output_path = generated_folder.join("out.csv");
+        //todo: set port here
+        let sink_output_path = generated_folder.join("replace_me.csv");
+        let experiment_output_path = generated_folder.join("out.csv");
 
 
 
@@ -455,6 +461,7 @@ impl InputConfig {
             output_trajectory_directory,
             //output_worker_config_directory,
             sink_output_path,
+            experiment_output_path,
             fixed_config_paths,
             mobile_config_paths,
             output_coordinator_config_path,
@@ -698,40 +705,87 @@ fn main() {
     let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
     let experiment_start = SystemTime::now();
     if let Ok(_) = experiment.start(nes_executable_paths, Arc::clone(&shutdown_triggered)) {
-        //wait for user to press ctrl c to exit
-        while !shutdown_triggered.load(Ordering::SeqCst) {
+        let desired_line_count = experiment.total_number_of_tuples_to_ingest;
+        // Bind the TCP listener to the specified address and port
+        let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
+        let mut line_count = 0; // Counter for the lines written
+        // Open the CSV file for writing
+        let mut file = File::create(&experiment.experiment_output_path).unwrap();
+        //let mut file = File::create("out.csv").unwrap();
 
-            let current_time = SystemTime::now();
-            if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                if elapsed_time > experiment_duration {
-                    break
-                }
+        // Accept incoming connections and handle them
+        for stream in listener.incoming() {
+            let stream = stream.unwrap();
+
+            // Handle the connection
+            if let Err(err) = handle_connection(stream, &mut line_count, desired_line_count, &mut file) {
+                eprintln!("Error handling connection: {}", err);
             }
-            sleep(Duration::from_secs(1));
-        }
+
+            // Check if the maximum number of lines has been written
+            if line_count >= desired_line_count as usize {
+                file.flush();
+                break;
+            }
+        }        //shutdown_triggered.store(true, SeqCst);
+
+        // while !shutdown_triggered.load(Ordering::SeqCst) {
+        //
+        //
+        //
+        //     //todo: this code is probably not needed anymore as we are now listening on the tcp connection
+        //     // let current_time = SystemTime::now();
+        //     // if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+        //     //     if elapsed_time > experiment_duration {
+        //     //         break
+        //     //     }
+        //     // }
+        //     // sleep(Duration::from_secs(1));
+        // }
     }
 
-    let desired_line_count = experiment.total_number_of_tuples_to_ingest;
 
-    loop {
-        // Check the file periodically
-        let line_count = count_lines_in_file(experiment.sink_output_path.as_path()).unwrap();
-        println!("Current line count: {} of {}", line_count, desired_line_count);
 
-        // Check if the desired line count is reached
-        if line_count >= desired_line_count.try_into().unwrap() {
-            println!("Desired line count reached!");
-            break;
-        }
-
-        // Wait for some time before checking again
-        sleep(Duration::from_secs(10)); // Wait for 10 seconds before checking again
-    }
+    // loop {
+    //     // Check the file periodically
+    //     let line_count = count_lines_in_file(experiment.sink_output_path.as_path()).unwrap();
+    //     println!("Current line count: {} of {}", line_count, desired_line_count);
+    //
+    //     // Check if the desired line count is reached
+    //     if line_count >= desired_line_count.try_into().unwrap() {
+    //         println!("Desired line count reached!");
+    //         break;
+    //     }
+    //
+    //     // Wait for some time before checking again
+    //     sleep(Duration::from_secs(10)); // Wait for 10 seconds before checking again
+    // }
 
 
     experiment.kill_processes().unwrap();
 }
 
+fn handle_connection(stream: std::net::TcpStream, line_count: &mut usize, desired_line_count: u64, file: &mut File) -> Result<(), Box<dyn Error>> {
+    // Create a buffer reader for the incoming data
+    let reader = BufReader::new(&stream);
+
+
+    // Iterate over the lines received from the client and write them to the CSV file
+    for line in reader.lines() {
+        let line = line?;
+        writeln!(file, "{}", line)?;
+
+        // Increment the line count
+        *line_count += 1;
+
+        // Check if the maximum number of lines has been written
+        if *line_count >= desired_line_count as usize {
+            break;
+        }
+    }
+
+    Ok(())
+}
 fn count_lines_in_file(file_path: &Path) -> io::Result<usize> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
