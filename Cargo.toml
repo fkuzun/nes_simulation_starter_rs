@@ -3,6 +3,14 @@ name = "simulation_runner_rs"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "simulation_runner_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "start_experiment"
+path = "src/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
