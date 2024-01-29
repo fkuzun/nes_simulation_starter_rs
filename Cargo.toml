@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "start_experiment"
 path = "src/main.rs"
 
+[[bin]]
+name = "tcp_input_server"
+path = "src/tcp_input_server.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
