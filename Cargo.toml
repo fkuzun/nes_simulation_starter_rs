@@ -19,6 +19,10 @@ path = "src/tcp_input_server.rs"
 name = "precalculate_reconnects"
 path = "src/precalculate_reconnects.rs"
 
+[[bin]]
+name = "create_mobile_configs_from_trajectories"
+path = "src/createMobileConfigsFromTrajectories.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

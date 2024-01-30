@@ -7,6 +7,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::raw::{time_t, uid_t};
 use std::process::{Child, Command, Stdio};
 use std::{fs, io, sync, time};
+use std::env::consts::OS;
+use std::ffi::OsStr;
 use std::fs::{File, read_to_string};
 use std::net::TcpListener;
 use std::ops::{Add, Sub};
@@ -109,16 +111,11 @@ pub struct Parameters {
     pub runtime: Duration,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub cooldown_time: Duration,
-    pub reconnect_input_type: ReconnectInputType,
+    pub reconnect_input_type: ReconnectPredictorType,
     pub source_input_server_port: u16
 }
 
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub enum ReconnectInputType {
-    Trajectory,
-    Precalculated
-}
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -347,16 +344,25 @@ impl InputConfig {
             SourceInputMethod::CSV => { self.default_source_input.tuples_per_buffer.try_into()? }
             SourceInputMethod::TCP => { 0 }
         };
-        for mobile_trajectory_file in fs::read_dir(input_trajectories_directory)? {
+        let mobility_input_config = MobilityInputConfigList::read_input_from_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))?;
+        let mut generated_mobility_configs = vec![];
+        for worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
+        //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
             //todo: can we remove the cretion of csv source?
             // let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
+            let mobile_trajectory_file = worker_mobility_input_config.locationProviderConfig;
+            //todo: find more elegant solution for this
+            if mobile_trajectory_file.extension().unwrap().to_str().unwrap() != "csv" {
+               continue;
+            }
 
             let mut rdr = csv::ReaderBuilder::new()
                 .has_headers(false)
-                .from_path(mobile_trajectory_file.as_ref().unwrap().path()).unwrap();
+                .from_path(mobile_trajectory_file.as_path()).unwrap();
             let waypoints: Vec<MobileWorkerWaypoint> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
 
-            let csv_name = mobile_trajectory_file.unwrap().file_name();
+
+            let csv_name = mobile_trajectory_file.file_name().unwrap();
             let output_trajectory_path = output_trajectory_directory.join(csv_name);
             let mut csv_writer = csv::WriterBuilder::new()
                 .has_headers(false)
@@ -374,6 +380,17 @@ impl InputConfig {
 
             csv_writer.flush().unwrap();
 
+            let generated_mobility_config = Mobilityconfig {
+                locationProviderConfig: output_trajectory_path,
+                locationProviderType: "CSV".to_owned(),
+                // locationProviderConfig: String::from(output_trajectory_path.to_str()
+                //     .ok_or("Could not get output trajectory path")?),
+                reconnectPredictorType: ReconnectPredictorType::LIVE,
+                precalcReconnectPath: PathBuf::from("none"),
+            };
+
+            generated_mobility_configs.push(generated_mobility_config.clone());
+
             //create config
             let worker_config = MobileWorkerConfig {
                 rpcPort: next_free_port,
@@ -381,11 +398,7 @@ impl InputConfig {
                 workerId: id,
                 numberOfSlots: 1,
                 nodeSpatialType: "MOBILE_NODE".to_owned(),
-                mobility: Mobilityconfig {
-                    locationProviderType: "CSV".to_owned(),
-                    locationProviderConfig: String::from(output_trajectory_path.to_str()
-                        .ok_or("Could not get output trajectory path")?),
-                },
+                mobility: generated_mobility_config,
                 physicalSources: vec![
                     PhysicalSource {
                         logicalSourceName: "values".to_owned(),
@@ -412,6 +425,11 @@ impl InputConfig {
             let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
             total_number_of_tuples_to_ingest += num_tuples;
         };
+
+        let list_of_generated_mobility_configs = MobilityInputConfigList {
+            worker_mobility_configs: generated_mobility_configs,
+        };
+        list_of_generated_mobility_configs.write_to_file(&output_trajectory_directory.join("mobility_configs.toml"));
 
         let mut edges = vec![];
         for (parent, children) in topology.children {
@@ -442,6 +460,31 @@ impl InputConfig {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum ReconnectPredictorType {
+    LIVE,
+    PRECALCULATED,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MobilityInputConfigList {
+    pub worker_mobility_configs: Vec<Mobilityconfig>
+}
+
+
+impl MobilityInputConfigList {
+    fn read_input_from_file(file_path: &Path) -> Result<Self, Box<dyn Error>> {
+        let config: Self = toml::from_str(&*read_to_string(file_path)?)?;
+        Ok(config)
+    }
+
+    pub fn write_to_file(&self, file_path: &Path) {
+        let toml_string = toml::to_string(&self).unwrap();
+        let mut file = File::create(file_path).unwrap();
+        file.write_all(toml_string.as_bytes()).unwrap();
+    }
+
+}
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize)]
 struct MobileWorkerWaypoint {
@@ -546,10 +589,12 @@ struct FixedWorkerConfig {
     //fieldNodeLocationCoordinates: (f64, f64),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Mobilityconfig {
-    locationProviderConfig: String,
-    locationProviderType: String,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Mobilityconfig {
+    pub locationProviderConfig: PathBuf,
+    pub locationProviderType: String,
+    pub reconnectPredictorType: ReconnectPredictorType,
+    pub precalcReconnectPath: PathBuf,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
