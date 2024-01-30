@@ -106,14 +106,30 @@ pub struct Parameters {
     pub runtime: Duration,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub cooldown_time: Duration,
+    pub reconnect_input_type: ReconnectInputType,
+    pub source_input_server_port: u16
+}
+
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum ReconnectInputType {
+    Trajectory,
+    Precalculated
 }
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DefaultSourceInput {
-    tuples_per_buffer: usize,
+    pub tuples_per_buffer: usize,
     #[serde_as(as = "DurationMilliSeconds<u64>")]
-    gathering_interval: Duration,
+    pub gathering_interval: Duration,
+    pub source_input_method: SourceInputMethod
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum SourceInputMethod {
+    CSV,
+    TCP
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -125,7 +141,7 @@ pub struct Paths {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct InputConfig {
     pub parameters: Parameters,
-    default_source_input: DefaultSourceInput,
+    pub default_source_input: DefaultSourceInput,
     paths: Paths,
 }
 
@@ -144,7 +160,8 @@ pub struct ExperimentSetup {
     fixed_worker_processes: Vec<Child>,
     edges: Vec<(u64, u64)>,
     pub input_config: InputConfig,
-    pub total_number_of_tuples_to_ingest: u64
+    pub total_number_of_tuples_to_ingest: u64,
+    pub num_buffers: u128,
 }
 
 impl ExperimentSetup {
@@ -192,66 +209,6 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    //the id does currently not correspond to the actual worker id
-    // fn start_fixed_location_workers(topology: &FixedTopology, worker_prcesses: &mut HashMap<u64, ProvisionalWorkerHandle>, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16, id: &mut u64) -> std::result::Result<(), Box<dyn Error>> {
-    //     for (input_id, location) in &topology.nodes {
-    //         if shutdown_triggered.load(Ordering::SeqCst) {
-    //             return Err(String::from("Shutdown triggered").into());
-    //         }
-    //         let worker_config = FixedWorkerConfig {
-    //             rpcPort: *next_free_port,
-    //             dataPort: *next_free_port + 1,
-    //             nodeSpatialType: "FIXED_LOCATION".to_string(),
-    //             fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
-    //             workerId: *id,
-    //         };
-    //         let yaml_name = format!("fixed_worker_configs/fixed_worker{}.yaml", id);
-    //         let yaml_string = serde_yaml::to_string(&worker_config)?;
-    //         let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
-    //         let mut after_round_trip = String::new();
-    //         YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
-    //         fs::write(&yaml_name, after_round_trip).expect("TODO: panic message");
-    //         let process = Command::new(worker_path)
-    //             //worker_prcesses.push(Command::new(worker_path)
-    //             //.arg(format!("--fieldNodeLocationCoordinates={},{}", location[0], location[1]))
-    //             //.arg("--nodeSpatialType=FIXED_LOCATION")
-    //             //.arg(format!("--parentId={}", actual_parent_id))
-    //             .arg(format!("--configPath={}", yaml_name))
-    //             .spawn()?;
-    //
-    //         worker_prcesses.insert(*input_id, ProvisionalWorkerHandle {
-    //             config: Fixed(worker_config),
-    //             process,
-    //             children: topology.children.get(input_id).unwrap().clone(),
-    //         });
-    //         *id += 1;
-    //         *next_free_port += 2;
-    //     }
-    //     let client = reqwest::blocking::Client::new();
-    //     for (input_id, worker_handle) in worker_prcesses.iter() {
-    //         let config = match &worker_handle.config {
-    //             Fixed(config) => { config }
-    //             WorkerConfigType::Mobile(_) => { panic!() }
-    //         };
-    //         let parent_id = config.workerId;
-    //         for child in &worker_handle.children {
-    //             let child_handle = &worker_prcesses[child];
-    //             let child_config = match &child_handle.config {
-    //                 Fixed(config) => { config }
-    //                 WorkerConfigType::Mobile(_) => { panic!() }
-    //             };
-    //             let child_id = child_config.workerId;
-    //             let link_request = AddEdgeRequest {
-    //                 parent_id,
-    //                 child_id,
-    //             };
-    //             let result = client.post("http://127.0.0.1:8081/v1/nes/topology/addAsChild")
-    //                 .json(&link_request).send()?;
-    //         }
-    //     }
-    //     Ok(())
-    // }
-
     pub fn kill_processes(&mut self) -> Result<(), Box<dyn Error>> {
         for mobile_worker in &mut self.mobile_worker_processes {
             println!("killing mobile worker");
@@ -262,10 +219,6 @@ impl ExperimentSetup {
             fixedWorker.kill().expect("could not kill worker");
         }
         //kill coordinator
-        // match &self.coordinator_process {
-        //     Some(&mut p) => *p.kill().unwrap(),
-        //     None => {}
-        // }
         self.coordinator_process.take().ok_or("Coordinator process not found")?.kill()?;
         Ok(())
     }
@@ -328,9 +281,6 @@ impl InputConfig {
         let sink_output_path = generated_folder.join("replace_me.csv");
         let experiment_output_path = generated_folder.join("out.csv");
 
-
-
-
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
             enableQueryReconfiguration: self.parameters.enable_query_reconfiguration,
@@ -347,7 +297,11 @@ impl InputConfig {
                             Type: UINT64,
                         },
                         LogicalSourceField {
-                            name: "input_timestamp".to_string(),
+                            name: "ingestion_timestamp".to_string(),
+                            Type: UINT64,
+                        },
+                        LogicalSourceField {
+                            name: "processing_timestamp".to_string(),
                             Type: UINT64,
                         },
                     ],
@@ -385,16 +339,20 @@ impl InputConfig {
         let mut total_number_of_tuples_to_ingest = 0;
         let mut mobile_config_paths = vec![];
         let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
+        let numberOfTuplesToProducePerBuffer = match self.default_source_input.source_input_method {
+            SourceInputMethod::CSV => { self.default_source_input.tuples_per_buffer.try_into()? }
+            SourceInputMethod::TCP => { 0 }
+        };
         for mobile_trajectory_file in fs::read_dir(input_trajectories_directory)? {
-            let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
-            //let mut rdr = csv::Reader::from_path(mobile_trajectory_file.as_ref().unwrap().path()).unwrap();
+            //todo: can we remove the cretion of csv source?
+            // let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
+
             let mut rdr = csv::ReaderBuilder::new()
                 .has_headers(false)
                 .from_path(mobile_trajectory_file.as_ref().unwrap().path()).unwrap();
             let waypoints: Vec<MobileWorkerWaypoint> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
 
             let csv_name = mobile_trajectory_file.unwrap().file_name();
-            //let mut csv_writer = csv::Writer::from_path(output_config_directory.join(csv_name)).unwrap();
             let output_trajectory_path = output_trajectory_directory.join(csv_name);
             let mut csv_writer = csv::WriterBuilder::new()
                 .has_headers(false)
@@ -430,10 +388,13 @@ impl InputConfig {
                         physicalSourceName: "values".to_owned(),
                         Type: PhysicalSourceType::CSV_SOURCE,
                         configuration: PhysicalSourceConfiguration {
-                            filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
+                            //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
+                            filePath: self.parameters.source_input_server_port.to_string(),
                             skipHeader: false,
-                            sourceGatheringInterval: self.default_source_input.gathering_interval,
-                            numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
+                            //todo: fix this
+                            sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
+                            //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
+                            numberOfTuplesToProducePerBuffer
                             //numberOfBuffersToProduce: num_buffers.try_into()?,
                         },
                     }
@@ -470,7 +431,8 @@ impl InputConfig {
             fixed_worker_processes: vec![],
             edges,
             total_number_of_tuples_to_ingest,
-            input_config: self.clone()
+            input_config: self.clone(),
+            num_buffers
         })
     }
 }
@@ -764,39 +726,6 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
     }
 }
 
-// fn start_mobile_workers(csv_directory: &str, worker_path: &Path, worker_processes: &mut Vec<Child>, shutdown_triggered: Arc<AtomicBool>, next_free_port: &mut u16) -> std::result::Result<(), Box<dyn Error>> {
-//     let paths = fs::read_dir(csv_directory)?;
-//     let source_count = 1;
-//     for path in paths {
-//         let path = path?;
-//         let file_name = path.file_name();
-//         println!("starting worker for vehicle {}", file_name.to_str().unwrap());
-//         let abs_path = path.path();
-//         let mut source_name = "values".to_owned();
-//         source_name.push_str(&source_count.to_string());
-//         *next_free_port += 2;
-//         let yaml_name = format!("mobile_configs/{}.yaml", file_name.to_str().unwrap());
-//         // let f = std::fs::OpenOptions::new()
-//         //     .write(true)
-//         //     .truncate(true)
-//         //     .create(true)
-//         //     .open(&yaml_name)?;
-//         //serde_yaml::to_writer(f, &worker_config)?;
-//         let yaml_string = serde_yaml::to_string(&worker_config)?;
-//         let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
-//         let mut after_round_trip = String::new();
-//         YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
-//         //fs::write(&yaml_name, yaml_string).expect("TODO: panic message");
-//         fs::write(&yaml_name, after_round_trip).expect("TODO: panic message");
-//         worker_processes.push(Command::new(worker_path)
-//             //.arg("--nodeSpatialType=MOBILE_NODE")
-//             .arg(format!("--configPath={}", yaml_name))
-//             .spawn()
-//             .expect("failed to execute coordinator"));
-//     }
-//     Ok(())
-// }
-
 fn create_csv_file(file_path: &str, id: u32, num_rows: usize) -> Result<(), Box<dyn Error>> {
     // Create or open the CSV file
     let mut file = File::create(file_path)?;
@@ -844,6 +773,3 @@ fn create_input_source_data(
 
     Ok(file_path)
 }
-
-//fn create_sequential_source_config();
-//let num_rows = (experiment_runtime / gathering_interval) as usize * tuples_per_buffer * num_buffers;

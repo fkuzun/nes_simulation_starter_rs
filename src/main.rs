@@ -1,13 +1,15 @@
+use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::net::TcpListener;
 use std::ops::Add;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use simulation_runner_lib::*;
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     //todo: read this from file
     let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
@@ -22,7 +24,6 @@ fn main() {
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
     let worker_path = &nes_executable_paths.worker_path;
-    //let generated_folder_path = simulation_config.create_generated_folder();
     let mut experiment = simulation_config.generate_experiment_configs().expect("Could not create experiment");
 
     let shutdown_triggered = Arc::new(AtomicBool::new(false));
@@ -30,7 +31,20 @@ fn main() {
     ctrlc::set_handler(move || {
         s.store(true, Ordering::SeqCst);
     }).expect("TODO: panic message");
-    //if let Ok(_) = start_children(&mut coordinator_process, &mut worker_processes, &mut mobile_worker_processes, coordinator_path, worker_path, Arc::clone(&shutdown_triggered)) {
+
+
+    //start source input server
+    let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
+        //todo: do not hard code
+        .arg("127.0.0.1")
+        .arg(experiment.input_config.parameters.source_input_server_port.to_string())
+        .arg(experiment.num_buffers.to_string())
+        .arg(experiment.input_config.default_source_input.tuples_per_buffer.to_string())
+        .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
+        .spawn()?;
+
+
+
     let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
     let experiment_start = SystemTime::now();
     if let Ok(_) = experiment.start(nes_executable_paths, Arc::clone(&shutdown_triggered)) {
@@ -40,7 +54,6 @@ fn main() {
         let mut line_count = 0; // Counter for the lines written
         // Open the CSV file for writing
         let mut file = File::create(&experiment.experiment_output_path).unwrap();
-        //let mut file = File::create("out.csv").unwrap();
 
         // Accept incoming connections and handle them
         for stream in listener.incoming() {
@@ -91,5 +104,7 @@ fn main() {
     // }
 
 
-    experiment.kill_processes().unwrap();
+    experiment.kill_processes()?;
+    source_input_server_process.kill()?;
+    Ok(())
 }
