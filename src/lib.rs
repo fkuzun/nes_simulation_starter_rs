@@ -1,3 +1,4 @@
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::format;
@@ -30,6 +31,8 @@ use crate::WorkerConfigType::Fixed;
 use serde_with::DurationMilliSeconds;
 use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
+
+pub mod analyze;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
@@ -151,6 +154,7 @@ pub struct ExperimentSetup {
     output_trajectory_directory: PathBuf,
     sink_output_path: PathBuf,
     pub experiment_output_path: PathBuf,
+    pub generated_folder: PathBuf,
     //output_worker_config_directory: PathBuf,
     fixed_config_paths: Vec<PathBuf>,
     mobile_config_paths: Vec<PathBuf>,
@@ -432,7 +436,8 @@ impl InputConfig {
             edges,
             total_number_of_tuples_to_ingest,
             input_config: self.clone(),
-            num_buffers
+            num_buffers,
+            generated_folder: generated_folder.to_path_buf(),
         })
     }
 }

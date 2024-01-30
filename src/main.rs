@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::format;
 use std::fs::File;
 use std::io::Write;
 use std::net::TcpListener;
@@ -9,6 +10,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use simulation_runner_lib::*;
+use simulation_runner_lib::analyze::create_notebook;
+
 fn main() -> Result<(), Box<dyn Error>> {
     //todo: read this from file
     let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
@@ -106,5 +109,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     experiment.kill_processes()?;
     source_input_server_process.kill()?;
+    create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
     Ok(())
 }
