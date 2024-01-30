@@ -3,6 +3,7 @@ use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::env;
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 fn main() -> std::io::Result<()> {
     // Parse environment variables
@@ -30,7 +31,7 @@ fn main() -> std::io::Result<()> {
             Ok(mut stream) => {
                 // Spawn a new thread to handle each client connection
                 thread::spawn(move || {
-                    if let Err(err) = handle_client(&mut stream, id_count, num_buffers, buffer_size, gather_interval) {
+                    if let Err(err) = handle_client(stream, id_count, num_buffers, buffer_size, gather_interval) {
                         eprintln!("Error handling client: {}", err);
                     }
                 });
@@ -45,15 +46,30 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn handle_client(stream: &mut TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration) -> std::io::Result<()> {
+fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration) -> std::io::Result<()> {
+
+    let (sender, receiver): (Sender<Option<Vec<u8>>>, Receiver<Option<Vec<u8>>>) = channel();
+    println!("Starting tcp writer thread");
+    thread::spawn(move || {
+        loop {
+            if let Ok(received) = receiver.recv() {
+                if let Some(data) = received {
+                    //if let Some(data: Vec<u8>) = receiver.recv().unwrap();
+                    // Write data into the socket
+                    &stream.write_all(&data).unwrap();
+                } else {
+                    break
+                }
+            }
+        }
+    });
 
     let mut sequence_nr = 0;
     for buffer in 0..num_buffers {
         // Generate data to write into the socket
         let data = generate_data(id, &mut sequence_nr, buffer_size)?;
+        sender.send(Some(data)).unwrap();
 
-        // Write data into the socket
-        stream.write_all(&data)?;
         std::thread::sleep(gathering_interval);
     }
 
@@ -65,7 +81,7 @@ fn generate_data(id: u64, sequence_nr: &mut u64, num_tuples: usize) -> std::io::
     for _i in 0..num_tuples {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH).unwrap()
-            .as_secs(); // Get current timestamp in seconds
+            .as_nanos() as u64; // Get current timestamp in milliseconds
 
         let id_bytes = id.to_le_bytes();
         let sequence_bytes = sequence_nr.to_le_bytes();

@@ -971,6 +971,7 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "text_io",
+ "tokio",
  "toml",
  "yaml-rust",
 ]
