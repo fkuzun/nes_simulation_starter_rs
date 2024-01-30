@@ -15,6 +15,10 @@ path = "src/main.rs"
 name = "tcp_input_server"
 path = "src/tcp_input_server.rs"
 
+[[bin]]
+name = "precalculate_reconnects"
+path = "src/precalculate_reconnects.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -32,3 +36,4 @@ toml = "0.8.8"
 chrono = "0.4.32"
 serde_with = { version = "3.5.1", features = ["chrono_0_4"] }
 tokio = "1.28.2"
+rand = "0.8.5"
