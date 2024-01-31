@@ -44,21 +44,23 @@ pub struct SimulationConfig {
     pub nes_root_dir: PathBuf,
     pub relative_worker_path: PathBuf,
     pub relative_coordinator_path: PathBuf,
-    pub experiment_directory: PathBuf,
+    pub output_directory: PathBuf,
+    pub input_config_path: PathBuf,
 }
 
 impl SimulationConfig {
-    fn get_input_folder_path(&self) -> PathBuf {
-        let mut path = self.experiment_directory.clone();
-        path.push(INPUT_FOLDER_SUB_PATH);
-        path
-    }
+    // fn get_input_folder_path(&self) -> PathBuf {
+    //     let mut path = self.experiment_directory.clone();
+    //     path.push(INPUT_FOLDER_SUB_PATH);
+    //     path
+    // }
 
     fn get_input_config_path(&self) -> PathBuf {
-        let mut path = self.experiment_directory.clone();
-        path.push(INPUT_FOLDER_SUB_PATH);
-        path.push(INPUT_CONFIG_NAME);
-        path
+        // let mut path = self.experiment_directory.clone();
+        // path.push(INPUT_FOLDER_SUB_PATH);
+        // path.push(INPUT_CONFIG_NAME);
+        // path
+        self.input_config_path.clone()
     }
 
     fn read_input_config(&self) -> InputConfig {
@@ -67,7 +69,8 @@ impl SimulationConfig {
     }
 
     fn create_generated_folder(&self) -> PathBuf {
-        create_folder_with_timestamp(self.experiment_directory.clone(), "generated_experiment_")
+        //create_folder_with_timestamp(self.experiment_directory.clone(), "generated_experiment_")
+        create_folder_with_timestamp(self.output_directory.clone(), self.input_config_path.file_name().unwrap().to_str().unwrap())
     }
 
     pub fn generate_experiment_configs(&self) -> Result<ExperimentSetup, Box<dyn Error>> {
@@ -187,7 +190,8 @@ impl ExperimentSetup {
         let execute_query_request = ExecuteQueryRequest {
             //user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
             //user_query: format!("Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
-            user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
+            user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{}\", \"CSV_FORMAT\", \"true\"));", self.sink_output_path.display()).to_string(),
+            //user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{OUTPUT}\", \"CSV_FORMAT\", \"true\"));", self.sink_output_path.display()).to_string(),
             placement: PlacementStrategyType::BottomUp,
         };
         let client = reqwest::blocking::Client::new();
@@ -370,7 +374,6 @@ impl InputConfig {
 
             for mut point in waypoints {
                 point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
-                //todo: multiply speed
                 if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
                     println!("skip waypoint");
                     break
@@ -380,13 +383,41 @@ impl InputConfig {
 
             csv_writer.flush().unwrap();
 
+            let output_precalculated_reconnects = match worker_mobility_input_config.reconnectPredictorType {
+                ReconnectPredictorType::LIVE => { "none".into() }
+                ReconnectPredictorType::PRECALCULATED => {
+                    let input_precalculated_reconnects = worker_mobility_input_config.precalcReconnectPath;
+                    let mut rdr = csv::ReaderBuilder::new()
+                        .has_headers(false)
+                        .from_path(&input_precalculated_reconnects).unwrap();
+                    let reconnects:  Vec<PrecalculatedReconnect> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
+
+                    let csv_name = input_precalculated_reconnects.file_name().unwrap();
+                    let output_precalc_path = output_trajectory_directory.join(csv_name);
+                    let mut csv_writer = csv::WriterBuilder::new()
+                        .has_headers(false)
+                        .from_path(&output_precalc_path).unwrap();
+
+                    for mut reconnect in reconnects {
+                        reconnect.offset = reconnect.offset.mul_f64(self.parameters.speedup_factor);
+                        if reconnect.offset > self.parameters.runtime.sub(self.parameters.cooldown_time) {
+                            println!("skip reconnect");
+                            break
+                        }
+                        csv_writer.serialize(reconnect).unwrap();
+                    }
+                    csv_writer.flush().unwrap();
+                    output_precalc_path
+                }
+            };
+
             let generated_mobility_config = Mobilityconfig {
                 locationProviderConfig: output_trajectory_path,
                 locationProviderType: "CSV".to_owned(),
                 // locationProviderConfig: String::from(output_trajectory_path.to_str()
                 //     .ok_or("Could not get output trajectory path")?),
-                reconnectPredictorType: ReconnectPredictorType::LIVE,
-                precalcReconnectPath: PathBuf::from("none"),
+                reconnectPredictorType: worker_mobility_input_config.reconnectPredictorType,
+                precalcReconnectPath: output_precalculated_reconnects,
             };
 
             generated_mobility_configs.push(generated_mobility_config.clone());
@@ -492,6 +523,16 @@ struct MobileWorkerWaypoint {
     latitude: f64,
     #[serde(rename = "column2")]
     longitude: f64,
+    #[serde_as(as = "DurationNanoSeconds<u64>")]
+    #[serde(rename = "column3")]
+    offset: Duration,
+}
+
+#[serde_as]
+#[derive(Debug, Deserialize, Serialize)]
+struct PrecalculatedReconnect {
+    #[serde(rename = "column1")]
+    parent_id: u64,
     #[serde_as(as = "DurationNanoSeconds<u64>")]
     #[serde(rename = "column3")]
     offset: Duration,

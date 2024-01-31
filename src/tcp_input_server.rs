@@ -54,7 +54,6 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
         loop {
             if let Ok(received) = receiver.recv() {
                 if let Some(data) = received {
-                    //if let Some(data: Vec<u8>) = receiver.recv().unwrap();
                     // Write data into the socket
                     &stream.write_all(&data).unwrap();
                 } else {

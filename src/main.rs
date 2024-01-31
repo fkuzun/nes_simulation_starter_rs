@@ -17,12 +17,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
-    let experiment_directory = PathBuf::from("/home/x/uni/ba/experiments");
+    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_reconfig.toml");
+    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
+    let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
     let simulation_config = SimulationConfig {
         nes_root_dir,
         relative_worker_path,
         relative_coordinator_path,
-        experiment_directory,
+        input_config_path,
+        output_directory
     };
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
