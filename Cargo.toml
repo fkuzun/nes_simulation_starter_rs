@@ -23,6 +23,10 @@ path = "src/precalculate_reconnects.rs"
 name = "create_mobile_configs_from_trajectories"
 path = "src/createMobileConfigsFromTrajectories.rs"
 
+[[bin]]
+name = "get_random_number_range"
+path = "src/get_random_number_range.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

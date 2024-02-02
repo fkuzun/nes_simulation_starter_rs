@@ -17,7 +17,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
-    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_reconfig.toml");
+    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_no_reconfig.toml");
+    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconf.toml");
+    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
     let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
     let simulation_config = SimulationConfig {

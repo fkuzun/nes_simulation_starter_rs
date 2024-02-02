@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::format;
@@ -115,9 +114,10 @@ pub struct Parameters {
     #[serde_as(as = "DurationSeconds<u64>")]
     pub cooldown_time: Duration,
     pub reconnect_input_type: ReconnectPredictorType,
-    pub source_input_server_port: u16
+    pub source_input_server_port: u16,
+    pub query_string: String,
+    pub place_default_source_on_fixed_node_ids: Vec<u64>,
 }
-
 
 
 #[serde_as]
@@ -126,13 +126,13 @@ pub struct DefaultSourceInput {
     pub tuples_per_buffer: usize,
     #[serde_as(as = "DurationMilliSeconds<u64>")]
     pub gathering_interval: Duration,
-    pub source_input_method: SourceInputMethod
+    pub source_input_method: SourceInputMethod,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum SourceInputMethod {
     CSV,
-    TCP
+    TCP,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -190,8 +190,9 @@ impl ExperimentSetup {
         let execute_query_request = ExecuteQueryRequest {
             //user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
             //user_query: format!("Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
-            user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{}\", \"CSV_FORMAT\", \"true\"));", self.sink_output_path.display()).to_string(),
-            //user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{OUTPUT}\", \"CSV_FORMAT\", \"true\"));", self.sink_output_path.display()).to_string(),
+            //user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{}\", \"CSV_FORMAT\", \"true\"));", self.sink_output_path.display()).to_string(),
+            //user_query: String::from("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{OUTPUT}\", \"CSV_FORMAT\", \"true\"));").replace("{OUTPUT}", self.sink_output_path.to_str().unwrap()),
+            user_query: self.input_config.parameters.query_string.replace("{OUTPUT}", self.sink_output_path.to_str().unwrap()),
             placement: PlacementStrategyType::BottomUp,
         };
         let client = reqwest::blocking::Client::new();
@@ -257,13 +258,13 @@ impl ExperimentSetup {
     }
 
     fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
-        self.coordinator_process = Some(Command::new(&coordinator_path)
-            .arg("--restServerCorsAllowedOrigin=*")
-            .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
-            .spawn()?);
-
-        //wait until coordinator is online
-        wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
+        // self.coordinator_process = Some(Command::new(&coordinator_path)
+        //     .arg("--restServerCorsAllowedOrigin=*")
+        //     .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
+        //     .spawn()?);
+        //
+        // //wait until coordinator is online
+        // wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
         std::thread::sleep(time::Duration::from_secs(1));
         Ok(())
     }
@@ -311,7 +312,7 @@ impl InputConfig {
                         },
                     ],
                 }
-            ]
+            ],
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
@@ -319,18 +320,46 @@ impl InputConfig {
         let json_string = std::fs::read_to_string(&self.paths.fixed_topology_nodes)?;
         let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
 
+        let numberOfTuplesToProducePerBuffer = match self.default_source_input.source_input_method {
+            SourceInputMethod::CSV => { self.default_source_input.tuples_per_buffer.try_into()? }
+            SourceInputMethod::TCP => { 0 }
+        };
+
         let mut next_free_port = 5000;
         let mut id = 2;
         let mut input_id_to_system_id_map = HashMap::new();
         let mut fixed_config_paths = vec![];
         for (input_id, location) in &topology.nodes {
+            let (physical_sources, number_of_slots) = if self.parameters.place_default_source_on_fixed_node_ids.contains(input_id) {
+                (vec![
+                    PhysicalSource {
+                        logicalSourceName: "values".to_owned(),
+                        physicalSourceName: "values".to_owned(),
+                        Type: PhysicalSourceType::CSV_SOURCE,
+                        configuration: PhysicalSourceConfiguration {
+                            //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
+                            filePath: self.parameters.source_input_server_port.to_string(),
+                            skipHeader: false,
+                            //todo: fix this
+                            sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
+                            //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
+                            numberOfTuplesToProducePerBuffer,
+                            //numberOfBuffersToProduce: num_buffers.try_into()?,
+                        },
+                    }
+                ], 1)
+            } else {
+                (vec![], 6000)
+            };
             let worker_config = FixedWorkerConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
-                numberOfSlots: 1,
+                numberOfSlots: 6000, //todo: set to 1 to stress test the plan creation
+                //numberOfSlots: number_of_slots,
                 nodeSpatialType: "FIXED_LOCATION".to_string(),
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: id,
+                physicalSources: physical_sources,
             };
             let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -344,20 +373,16 @@ impl InputConfig {
         let mut total_number_of_tuples_to_ingest = 0;
         let mut mobile_config_paths = vec![];
         let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
-        let numberOfTuplesToProducePerBuffer = match self.default_source_input.source_input_method {
-            SourceInputMethod::CSV => { self.default_source_input.tuples_per_buffer.try_into()? }
-            SourceInputMethod::TCP => { 0 }
-        };
         let mobility_input_config = MobilityInputConfigList::read_input_from_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))?;
         let mut generated_mobility_configs = vec![];
         for worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
-        //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
+            //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
             //todo: can we remove the cretion of csv source?
             // let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
             let mobile_trajectory_file = worker_mobility_input_config.locationProviderConfig;
             //todo: find more elegant solution for this
             if mobile_trajectory_file.extension().unwrap().to_str().unwrap() != "csv" {
-               continue;
+                continue;
             }
 
             let mut rdr = csv::ReaderBuilder::new()
@@ -376,7 +401,7 @@ impl InputConfig {
                 point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
                 if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
                     println!("skip waypoint");
-                    break
+                    break;
                 }
                 csv_writer.serialize(point).unwrap();
             }
@@ -390,7 +415,7 @@ impl InputConfig {
                     let mut rdr = csv::ReaderBuilder::new()
                         .has_headers(false)
                         .from_path(&input_precalculated_reconnects).unwrap();
-                    let reconnects:  Vec<PrecalculatedReconnect> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
+                    let reconnects: Vec<PrecalculatedReconnect> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
 
                     let csv_name = input_precalculated_reconnects.file_name().unwrap();
                     let output_precalc_path = output_trajectory_directory.join(csv_name);
@@ -402,7 +427,7 @@ impl InputConfig {
                         reconnect.offset = reconnect.offset.mul_f64(self.parameters.speedup_factor);
                         if reconnect.offset > self.parameters.runtime.sub(self.parameters.cooldown_time) {
                             println!("skip reconnect");
-                            break
+                            break;
                         }
                         csv_writer.serialize(reconnect).unwrap();
                     }
@@ -413,7 +438,8 @@ impl InputConfig {
 
             let generated_mobility_config = Mobilityconfig {
                 locationProviderConfig: output_trajectory_path,
-                locationProviderType: "CSV".to_owned(),
+                //locationProviderType: "CSV".to_owned(),
+                locationProviderType: "BASE".to_owned(),
                 // locationProviderConfig: String::from(output_trajectory_path.to_str()
                 //     .ok_or("Could not get output trajectory path")?),
                 reconnectPredictorType: worker_mobility_input_config.reconnectPredictorType,
@@ -424,6 +450,7 @@ impl InputConfig {
 
             //create config
             let worker_config = MobileWorkerConfig {
+                fieldNodeLocationCoordinates: "0,0".into(), //setting this only in case we are using precalculated reconnects
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
                 workerId: id,
@@ -442,7 +469,7 @@ impl InputConfig {
                             //todo: fix this
                             sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
                             //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
-                            numberOfTuplesToProducePerBuffer
+                            numberOfTuplesToProducePerBuffer,
                             //numberOfBuffersToProduce: num_buffers.try_into()?,
                         },
                     }
@@ -499,7 +526,7 @@ pub enum ReconnectPredictorType {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MobilityInputConfigList {
-    pub worker_mobility_configs: Vec<Mobilityconfig>
+    pub worker_mobility_configs: Vec<Mobilityconfig>,
 }
 
 
@@ -514,8 +541,8 @@ impl MobilityInputConfigList {
         let mut file = File::create(file_path).unwrap();
         file.write_all(toml_string.as_bytes()).unwrap();
     }
-
 }
+
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize)]
 struct MobileWorkerWaypoint {
@@ -617,6 +644,7 @@ struct MobileWorkerConfig {
     nodeSpatialType: String,
     mobility: Mobilityconfig,
     physicalSources: Vec<PhysicalSource>,
+    fieldNodeLocationCoordinates: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -627,6 +655,8 @@ struct FixedWorkerConfig {
     nodeSpatialType: String,
     fieldNodeLocationCoordinates: String,
     workerId: u64,
+    #[serde(skip_serializing_if = "std::vec::Vec::is_empty")]
+    physicalSources: Vec<PhysicalSource>,
     //fieldNodeLocationCoordinates: (f64, f64),
 }
 
@@ -636,6 +666,12 @@ pub struct Mobilityconfig {
     pub locationProviderType: String,
     pub reconnectPredictorType: ReconnectPredictorType,
     pub precalcReconnectPath: PathBuf,
+}
+
+enum LocationProviderType {
+    BASE,
+    CSV,
+    INVALID,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -753,6 +789,7 @@ pub fn handle_connection(stream: std::net::TcpStream, line_count: &mut usize, de
 
     Ok(())
 }
+
 fn count_lines_in_file(file_path: &Path) -> io::Result<usize> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
