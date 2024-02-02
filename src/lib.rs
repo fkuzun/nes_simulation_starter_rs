@@ -258,13 +258,13 @@ impl ExperimentSetup {
     }
 
     fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
-        // self.coordinator_process = Some(Command::new(&coordinator_path)
-        //     .arg("--restServerCorsAllowedOrigin=*")
-        //     .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
-        //     .spawn()?);
-        //
-        // //wait until coordinator is online
-        // wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
+        self.coordinator_process = Some(Command::new(&coordinator_path)
+            .arg("--restServerCorsAllowedOrigin=*")
+            .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
+            .spawn()?);
+
+        //wait until coordinator is online
+        wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
         std::thread::sleep(time::Duration::from_secs(1));
         Ok(())
     }
