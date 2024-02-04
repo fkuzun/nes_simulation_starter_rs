@@ -20,6 +20,10 @@ name = "precalculate_reconnects"
 path = "src/precalculate_reconnects.rs"
 
 [[bin]]
+name = "precalculate_reconnects_from_topology_json"
+path = "src/precalculate_reconnects_from_topology_json.rs"
+
+[[bin]]
 name = "create_mobile_configs_from_trajectories"
 path = "src/createMobileConfigsFromTrajectories.rs"
 

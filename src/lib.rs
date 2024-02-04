@@ -160,8 +160,8 @@ pub struct ExperimentSetup {
     mobile_config_paths: Vec<PathBuf>,
     output_coordinator_config_path: PathBuf,
     coordinator_process: Option<Child>,
-    mobile_worker_processes: Vec<Child>,
-    fixed_worker_processes: Vec<Child>,
+    pub mobile_worker_processes: Vec<Child>,
+    pub fixed_worker_processes: Vec<Child>,
     edges: Vec<(u64, u64)>,
     pub input_config: InputConfig,
     pub total_number_of_tuples_to_ingest: u64,
@@ -205,12 +205,22 @@ impl ExperimentSetup {
     fn add_edges(&self) -> Result<(), Box<dyn Error>> {
         let client = reqwest::blocking::Client::new();
         for (parent_id, child_id) in &self.edges {
+            if parent_id == &1 {
+                continue;
+            }
             let link_request = AddEdgeRequest {
                 parent_id: *parent_id,
                 child_id: *child_id,
             };
             let result = client.post("http://127.0.0.1:8081/v1/nes/topology/addAsChild")
                 .json(&link_request).send()?;
+            let link_request = AddEdgeRequest {
+                parent_id: 1,
+                child_id: *child_id,
+            };
+            let result = client.delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
+                .json(&link_request).send()?;
+            //assert!(result.json().unwrap());
         };
         Ok(())
     }
@@ -258,13 +268,13 @@ impl ExperimentSetup {
     }
 
     fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
-        self.coordinator_process = Some(Command::new(&coordinator_path)
-            .arg("--restServerCorsAllowedOrigin=*")
-            .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
-            .spawn()?);
-
-        //wait until coordinator is online
-        wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
+        // self.coordinator_process = Some(Command::new(&coordinator_path)
+        //     .arg("--restServerCorsAllowedOrigin=*")
+        //     .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
+        //     .spawn()?);
+        //
+        // //wait until coordinator is online
+        // wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
         std::thread::sleep(time::Duration::from_secs(1));
         Ok(())
     }
@@ -349,13 +359,13 @@ impl InputConfig {
                     }
                 ], 1)
             } else {
-                (vec![], 6000)
+                (vec![], 60000)
             };
             let worker_config = FixedWorkerConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
-                numberOfSlots: 6000, //todo: set to 1 to stress test the plan creation
-                //numberOfSlots: number_of_slots,
+                //numberOfSlots: 6000, //todo: set to 1 to stress test the plan creation
+                numberOfSlots: number_of_slots,
                 nodeSpatialType: "FIXED_LOCATION".to_string(),
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: id,
@@ -567,10 +577,10 @@ struct PrecalculatedReconnect {
 
 
 #[derive(Deserialize, Debug)]
-struct FixedTopology {
+pub struct FixedTopology {
     //todo: check if we can just make that a tuple
-    nodes: HashMap<u64, Vec<f64>>,
-    children: HashMap<u64, Vec<u64>>,
+    pub nodes: HashMap<u64, Vec<f64>>,
+    pub children: HashMap<u64, Vec<u64>>,
 }
 
 #[derive(Deserialize, Debug)]

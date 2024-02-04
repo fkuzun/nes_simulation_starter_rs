@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_no_reconfig.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconf.toml");
     let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_no_reconf.toml");
+    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
     let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
@@ -57,7 +58,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
     let experiment_start = SystemTime::now();
     if let Ok(_) = experiment.start(nes_executable_paths, Arc::clone(&shutdown_triggered)) {
-        let desired_line_count = experiment.total_number_of_tuples_to_ingest;
+        let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.mobile_worker_processes.len();
+        let desired_line_count = experiment.total_number_of_tuples_to_ingest * num_sources as u64;
         // Bind the TCP listener to the specified address and port
         let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
         let mut line_count = 0; // Counter for the lines written
