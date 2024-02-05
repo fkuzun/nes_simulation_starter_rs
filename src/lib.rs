@@ -185,7 +185,7 @@ impl ExperimentSetup {
 
         self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered))?;
 
-        sleep(Duration::from_secs(2));
+        sleep(Duration::from_secs(4));
 
         let execute_query_request = ExecuteQueryRequest {
             //user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
@@ -275,7 +275,7 @@ impl ExperimentSetup {
         //
         // //wait until coordinator is online
         // wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
-        std::thread::sleep(time::Duration::from_secs(1));
+        // std::thread::sleep(time::Duration::from_secs(1));
         Ok(())
     }
 }
@@ -796,6 +796,7 @@ pub fn handle_connection(stream: std::net::TcpStream, line_count: &mut usize, de
             break;
         }
     }
+    println!("Received {} lines of {}", *line_count, desired_line_count);
 
     Ok(())
 }

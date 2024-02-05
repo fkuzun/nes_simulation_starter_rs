@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::format;
 use std::fs::File;
 use std::io::Write;
-use std::net::TcpListener;
+//use std::net::TcpListener;
 use std::ops::Add;
 use std::path::PathBuf;
 use std::process::Command;
@@ -11,6 +11,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use simulation_runner_lib::*;
 use simulation_runner_lib::analyze::create_notebook;
+use tokio::sync::Mutex;
+use tokio::net::TcpListener;
+use tokio::io::{AsyncWriteExt, AsyncReadExt};
 
 fn main() -> Result<(), Box<dyn Error>> {
     //todo: read this from file
@@ -19,10 +22,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_no_reconfig.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconf.toml");
-    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_no_reconf.toml");
+    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_no_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
+    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
     let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
     let simulation_config = SimulationConfig {
         nes_root_dir,
@@ -61,26 +64,84 @@ fn main() -> Result<(), Box<dyn Error>> {
         let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.mobile_worker_processes.len();
         let desired_line_count = experiment.total_number_of_tuples_to_ingest * num_sources as u64;
         // Bind the TCP listener to the specified address and port
-        let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
+       // let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
         let mut line_count = 0; // Counter for the lines written
         // Open the CSV file for writing
         let mut file = File::create(&experiment.experiment_output_path).unwrap();
 
-        // Accept incoming connections and handle them
-        for stream in listener.incoming() {
-            let stream = stream.unwrap();
+        // // Accept incoming connections and handle them
+        // for stream in listener.incoming() {
+        //     println!("New connection");
+        //     let stream = stream.unwrap();
+        //
+        //     // Handle the connection
+        //     if let Err(err) = handle_connection(stream, &mut line_count, desired_line_count, &mut file) {
+        //         eprintln!("Error handling connection: {}", err);
+        //     }
+        //
+        //     // Check if the maximum number of lines has been written
+        //     if line_count >= desired_line_count as usize {
+        //         file.flush();
+        //         break;
+        //     }
+        // }
 
-            // Handle the connection
-            if let Err(err) = handle_connection(stream, &mut line_count, desired_line_count, &mut file) {
-                eprintln!("Error handling connection: {}", err);
-            }
+        // Wrap line_count and file in Arc<Mutex<>> for safe sharing between tasks
+        let line_count = Arc::new(Mutex::new(0));
+        let file = Arc::new(Mutex::new(file));
 
-            // Check if the maximum number of lines has been written
-            if line_count >= desired_line_count as usize {
-                file.flush();
-                break;
+        //let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
+
+        // Create the runtime
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        // Use the runtime
+        runtime.block_on(async {
+            use tokio::sync::Mutex;
+            use std::sync::Arc;
+            use tokio::net::TcpListener;
+            use tokio::io::{AsyncWriteExt, AsyncReadExt};
+
+            // Wrap line_count and file in Arc<Mutex<>> for safe sharing between tasks
+            let line_count = Arc::new(Mutex::new(0));
+            //let file = Arc::new(Mutex::new(file));
+
+            let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
+
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                println!("New connection");
+
+                // Clone Arc pointers for use in the new task
+                let line_count = Arc::clone(&line_count);
+                let file = Arc::clone(&file);
+
+                // Spawn a new task to handle the connection
+                tokio::spawn(async move {
+                    // Handle the connection
+                    let mut buffer = [0; 1024];
+                    let n = socket.read(&mut buffer).await.unwrap();
+
+                    // Lock line_count and file for this task's use
+                    let mut line_count = line_count.lock().await;
+                    let mut file = file.lock().await;
+
+                    // Write to file and line_count
+                    file.write_all(&buffer[..n]).unwrap();
+                    *line_count += 1;
+
+                    // Check if the maximum number of lines has been written
+                    if *line_count >= desired_line_count as usize {
+                        file.flush().unwrap();
+                    }
+                });
             }
-        }        //shutdown_triggered.store(true, SeqCst);
+        });
+
+        //shutdown_triggered.store(true, SeqCst);
 
         // while !shutdown_triggered.load(Ordering::SeqCst) {
         //
@@ -115,7 +176,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // }
 
 
-    experiment.kill_processes()?;
+    experiment.kill_processes();
     source_input_server_process.kill()?;
     create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
     Ok(())
