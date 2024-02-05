@@ -24,7 +24,7 @@ use std::time::{Duration, SystemTime};
 use sync::atomic;
 use chrono::Local;
 use nes_tools::launch::Launch;
-use nes_tools::topology::{AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType};
+use nes_tools::topology::{AddEdgeReply, AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType};
 use serde_with::serde_as;
 use yaml_rust::{YamlEmitter, YamlLoader};
 use crate::FieldType::UINT64;
@@ -38,6 +38,36 @@ pub mod analyze;
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
 
+#[derive(Deserialize, Debug)]
+pub struct MultiSimulationInputConfig {
+    pub enable_query_reconfiguration: Vec<bool>,
+    pub default_config: InputConfig,
+}
+
+impl MultiSimulationInputConfig {
+    pub fn read_input_from_file(file_path: &Path) -> Result<Self, Box<dyn Error>> {
+        let config: Self = toml::from_str(&*read_to_string(file_path)?)?;
+        Ok(config)
+    }
+
+    pub fn generate_input_configs(&self) -> Vec<InputConfig> {
+        let mut configs = vec![];
+        for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
+            let config = InputConfig {
+                parameters: Parameters {
+                    enable_query_reconfiguration,
+                    ..self.default_config.parameters.clone()
+                },
+                ..self.default_config.clone()
+            };
+            configs.push(config);
+        };
+        configs
+
+
+    }
+
+}
 #[derive(Deserialize, Debug)]
 pub struct SimulationConfig {
     pub nes_root_dir: PathBuf,
@@ -216,7 +246,9 @@ impl ExperimentSetup {
             };
             let result = client.post("http://127.0.0.1:8081/v1/nes/topology/addAsChild")
                 .json(&link_request).send()?;
-            println!("{}", result.text().unwrap());
+            //println!("{}", result.text().unwrap());
+            let reply: AddEdgeReply = result.json().unwrap();
+            assert!(reply.success);
             let link_request = AddEdgeRequest {
                 parent_id: 1,
                 child_id: *child_id,
@@ -224,6 +256,8 @@ impl ExperimentSetup {
             let result = client.delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
                 .json(&link_request).send()?;
             //assert!(result.json().unwrap());
+            let reply: AddEdgeReply = result.json().unwrap();
+            assert!(reply.success);
         };
         Ok(())
     }
@@ -271,13 +305,13 @@ impl ExperimentSetup {
     }
 
     fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
-        // self.coordinator_process = Some(Command::new(&coordinator_path)
-        //     .arg("--restServerCorsAllowedOrigin=*")
-        //     .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
-        //     .spawn()?);
-        //
-        // //wait until coordinator is online
-        // wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
+        self.coordinator_process = Some(Command::new(&coordinator_path)
+            .arg("--restServerCorsAllowedOrigin=*")
+            .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
+            .spawn()?);
+
+        //wait until coordinator is online
+        wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
         std::thread::sleep(time::Duration::from_secs(1));
         Ok(())
     }

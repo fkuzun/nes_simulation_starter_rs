@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use simulation_runner_lib::*;
 use simulation_runner_lib::analyze::create_notebook;
@@ -24,6 +25,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
     let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
+
+
+
     let simulation_config = SimulationConfig {
         nes_root_dir,
         relative_worker_path,
@@ -58,8 +62,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
     let experiment_start = SystemTime::now();
     if let Ok(_) = experiment.start(nes_executable_paths, Arc::clone(&shutdown_triggered)) {
-        let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.mobile_worker_processes.len();
-        let desired_line_count = experiment.total_number_of_tuples_to_ingest * num_sources as u64;
+        //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
+        let desired_line_count = experiment.total_number_of_tuples_to_ingest;
         // Bind the TCP listener to the specified address and port
         let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
         let mut line_count = 0; // Counter for the lines written
@@ -82,19 +86,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }        //shutdown_triggered.store(true, SeqCst);
 
-        // while !shutdown_triggered.load(Ordering::SeqCst) {
-        //
-        //
-        //
-        //     //todo: this code is probably not needed anymore as we are now listening on the tcp connection
-        //     // let current_time = SystemTime::now();
-        //     // if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-        //     //     if elapsed_time > experiment_duration {
-        //     //         break
-        //     //     }
-        //     // }
-        //     // sleep(Duration::from_secs(1));
-        // }
+        while !shutdown_triggered.load(Ordering::SeqCst) {
+
+
+
+            //todo: this code is probably not needed anymore as we are now listening on the tcp connection
+            let current_time = SystemTime::now();
+            if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                if elapsed_time > experiment_duration + Duration::from_secs(10) {
+                    break
+                }
+            }
+            sleep(Duration::from_secs(1));
+        }
     }
 
 
