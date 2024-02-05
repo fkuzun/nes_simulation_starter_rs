@@ -396,7 +396,7 @@ impl InputConfig {
                     ],
                 }
             ],
-            logLevel: LogLevel::NONE,
+            logLevel: LogLevel::LOG_NONE,
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
@@ -448,7 +448,7 @@ impl InputConfig {
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: id,
                 physicalSources: physical_sources,
-                logLevel: LogLevel::NONE,
+                logLevel: LogLevel::LOG_NONE,
             };
             let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -561,7 +561,7 @@ impl InputConfig {
                         },
                     }
                 ],
-                logLevel: LogLevel::NONE,
+                logLevel: LogLevel::LOG_NONE,
             };
             let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -793,11 +793,11 @@ struct CoordinatorConfiguration {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum LogLevel {
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR,
-    NONE,
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_WARN,
+    LOG_ERROR,
+    LOG_NONE,
 }
 
 impl CoordinatorConfiguration {
