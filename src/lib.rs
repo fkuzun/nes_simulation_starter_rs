@@ -50,7 +50,23 @@ impl MultiSimulationInputConfig {
         Ok(config)
     }
 
-    pub fn generate_input_configs(&self) -> Vec<InputConfig> {
+    pub fn get_reconfig_short_name(&self) -> String {
+        String::from("reconf")
+    }
+
+    pub fn get_short_name_value_separator(&self) -> String {
+        String::from(":")
+    }
+
+    pub fn get_short_name_to_short_name_separator(&self) -> String {
+        String::from("_")
+    }
+
+    pub fn get_short_name_with_value(&self, short_name: &str, value: &str) -> String {
+        format!("{}{}{}", short_name, self.get_short_name_value_separator(), value)
+    }
+
+    pub fn generate_input_configs(&self) -> Vec<(String, InputConfig)> {
         let mut configs = vec![];
         for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
             let config = InputConfig {
@@ -60,7 +76,8 @@ impl MultiSimulationInputConfig {
                 },
                 ..self.default_config.clone()
             };
-            configs.push(config);
+            let short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
+            configs.push((short_name, config));
         };
         configs
 
@@ -97,20 +114,39 @@ impl SimulationConfig {
         input_config
     }
 
+    fn read_multi_simulation_input_config(&self) -> MultiSimulationInputConfig {
+        let input_config: MultiSimulationInputConfig = toml::from_str(&*read_to_string(&self.get_input_config_path()).expect("Could not read config file")).expect("could not parse confit file");
+        input_config
+    }
+
     fn create_generated_folder(&self) -> PathBuf {
         //create_folder_with_timestamp(self.experiment_directory.clone(), "generated_experiment_")
         create_folder_with_timestamp(self.output_directory.clone(), self.input_config_path.file_name().unwrap().to_str().unwrap())
     }
 
-    pub fn generate_experiment_configs(&self) -> Result<ExperimentSetup, Box<dyn Error>> {
-        let generated_folder = self.create_generated_folder();
-        let input_config = self.read_input_config();
-        let input_config_copy_path = generated_folder.join("input_config_copy.toml");
-        let toml_string = toml::to_string(&input_config)?;
-        let mut file = File::create(input_config_copy_path)?;
-        file.write_all(toml_string.as_bytes())?;
+    pub fn generate_experiment_configs(&self) -> Result<Vec<ExperimentSetup>, Box<dyn Error>> {
+        let generated_main_folder = self.create_generated_folder();
+        //let input_config = self.read_input_config();
+        let multi_simulation_config = self.read_multi_simulation_input_config();
+        let input_config_list = multi_simulation_config.generate_input_configs();
+        let mut setups = vec![];
+        for (short_name, input_config) in input_config_list {
+            let generated_folder = generated_main_folder.join(short_name);
+            fs::create_dir_all(&generated_folder)?;
+            let input_config_copy_path = generated_folder.join("input_config_copy.toml");
+            let toml_string = toml::to_string(&input_config)?;
+            let mut file = File::create(input_config_copy_path)?;
+            file.write_all(toml_string.as_bytes())?;
 
-        input_config.generate_output_config(&generated_folder)
+            setups.push(input_config.generate_output_config(&generated_folder)?);
+        }
+        Ok(setups)
+        // let input_config_copy_path = generated_folder.join("input_config_copy.toml");
+        // let toml_string = toml::to_string(&input_config)?;
+        // let mut file = File::create(input_config_copy_path)?;
+        // file.write_all(toml_string.as_bytes())?;
+        //
+        // input_config.generate_output_config(&generated_folder)
     }
 }
 
@@ -199,7 +235,7 @@ pub struct ExperimentSetup {
 }
 
 impl ExperimentSetup {
-    pub fn start(&mut self, executable_paths: NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+    pub fn start(&mut self, executable_paths: &NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
         self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered))?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered))?;
@@ -360,6 +396,7 @@ impl InputConfig {
                     ],
                 }
             ],
+            logLevel: LogLevel::NONE,
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
@@ -411,6 +448,7 @@ impl InputConfig {
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: id,
                 physicalSources: physical_sources,
+                logLevel: LogLevel::NONE,
             };
             let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -523,6 +561,7 @@ impl InputConfig {
                         },
                     }
                 ],
+                logLevel: LogLevel::NONE,
             };
             let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -694,6 +733,7 @@ struct MobileWorkerConfig {
     mobility: Mobilityconfig,
     physicalSources: Vec<PhysicalSource>,
     fieldNodeLocationCoordinates: String,
+    logLevel: LogLevel
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -706,6 +746,7 @@ struct FixedWorkerConfig {
     workerId: u64,
     #[serde(skip_serializing_if = "std::vec::Vec::is_empty")]
     physicalSources: Vec<PhysicalSource>,
+    logLevel: LogLevel
     //fieldNodeLocationCoordinates: (f64, f64),
 }
 
@@ -747,6 +788,16 @@ struct LogicalSource {
 struct CoordinatorConfiguration {
     enableQueryReconfiguration: bool,
     logicalSources: Vec<LogicalSource>,
+    logLevel: LogLevel,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum LogLevel {
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR,
+    NONE,
 }
 
 impl CoordinatorConfiguration {
