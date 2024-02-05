@@ -176,6 +176,8 @@ impl ExperimentSetup {
 
         self.start_fixed_workers(&executable_paths.worker_path, Arc::clone(&shutdown_triggered))?;
 
+        wait_for_topology(Some(self.fixed_worker_processes.len() + 1), Arc::clone(&shutdown_triggered))?;
+
         self.add_edges()?;
 
         //wait for user to press key to start mobile workers
@@ -214,6 +216,7 @@ impl ExperimentSetup {
             };
             let result = client.post("http://127.0.0.1:8081/v1/nes/topology/addAsChild")
                 .json(&link_request).send()?;
+            println!("{}", result.text().unwrap());
             let link_request = AddEdgeRequest {
                 parent_id: 1,
                 child_id: *child_id,
@@ -339,8 +342,12 @@ impl InputConfig {
         let mut id = 2;
         let mut input_id_to_system_id_map = HashMap::new();
         let mut fixed_config_paths = vec![];
+        let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
+        let mut total_number_of_tuples_to_ingest = 0;
         for (input_id, location) in &topology.nodes {
             let (physical_sources, number_of_slots) = if self.parameters.place_default_source_on_fixed_node_ids.contains(input_id) {
+                let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
+                total_number_of_tuples_to_ingest += num_tuples;
                 (vec![
                     PhysicalSource {
                         logicalSourceName: "values".to_owned(),
@@ -380,9 +387,7 @@ impl InputConfig {
         }
 
 
-        let mut total_number_of_tuples_to_ingest = 0;
         let mut mobile_config_paths = vec![];
-        let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
         let mobility_input_config = MobilityInputConfigList::read_input_from_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))?;
         let mut generated_mobility_configs = vec![];
         for worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
@@ -796,6 +801,7 @@ pub fn handle_connection(stream: std::net::TcpStream, line_count: &mut usize, de
             break;
         }
     }
+    println!("Received {} lines of {}", *line_count, desired_line_count);
 
     Ok(())
 }
