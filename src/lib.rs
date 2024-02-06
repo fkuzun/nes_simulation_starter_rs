@@ -38,9 +38,13 @@ pub mod analyze;
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
 
-#[derive(Deserialize, Debug)]
+#[serde_as]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MultiSimulationInputConfig {
     pub enable_query_reconfiguration: Vec<bool>,
+    pub tuples_per_buffer: Vec<usize>,
+    #[serde_as(as = "Vec<DurationMilliSeconds<u64>>")]
+    pub gathering_interval: Vec<Duration>,
     pub default_config: InputConfig,
 }
 
@@ -52,6 +56,14 @@ impl MultiSimulationInputConfig {
 
     pub fn get_reconfig_short_name(&self) -> String {
         String::from("reconf")
+    }
+
+    pub fn get_tuples_per_buffer_short_name(&self) -> String {
+        String::from("tuplesPerBuffer")
+    }
+
+    pub fn get_gathering_interval_short_name(&self) -> String {
+        String::from("gatheringInterval")
     }
 
     pub fn get_short_name_value_separator(&self) -> String {
@@ -69,15 +81,36 @@ impl MultiSimulationInputConfig {
     pub fn generate_input_configs(&self) -> Vec<(String, InputConfig)> {
         let mut configs = vec![];
         for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
-            let config = InputConfig {
-                parameters: Parameters {
-                    enable_query_reconfiguration,
-                    ..self.default_config.parameters.clone()
-                },
-                ..self.default_config.clone()
-            };
-            let short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
-            configs.push((short_name, config));
+            for &tuples_per_buffer in &self.tuples_per_buffer {
+                for &gathering_interval in &self.gathering_interval {
+                    let config = InputConfig {
+                        parameters: Parameters {
+                            enable_query_reconfiguration,
+                            ..self.default_config.parameters.clone()
+                        },
+                        default_source_input: DefaultSourceInput {
+                            tuples_per_buffer,
+                            gathering_interval,
+                            ..self.default_config.default_source_input.clone()
+                        },
+                        ..self.default_config.clone()
+                    };
+                    let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
+                    short_name.push_str(&self.get_short_name_to_short_name_separator());
+                    short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
+                    short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
+                    configs.push((short_name, config));
+                }
+            }
+            // let config = InputConfig {
+            //     parameters: Parameters {
+            //         enable_query_reconfiguration,
+            //         ..self.default_config.parameters.clone()
+            //     },
+            //     ..self.default_config.clone()
+            // };
+            // let short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
+            // configs.push((short_name, config));
         };
         configs
 
@@ -320,6 +353,7 @@ impl ExperimentSetup {
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
+                .arg("--logLevel=LOG_ERROR")
                 .spawn()?;
 
             self.fixed_worker_processes.push(process);
@@ -334,6 +368,7 @@ impl ExperimentSetup {
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
+                .arg("--logLevel=LOG_ERROR")
                 .spawn()?;
             self.fixed_worker_processes.push(process);
         };
@@ -344,6 +379,7 @@ impl ExperimentSetup {
         self.coordinator_process = Some(Command::new(&coordinator_path)
             .arg("--restServerCorsAllowedOrigin=*")
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
+            .arg("--logLevel=LOG_ERROR")
             .spawn()?);
 
         //wait until coordinator is online
@@ -396,7 +432,7 @@ impl InputConfig {
                     ],
                 }
             ],
-            logLevel: LogLevel::LOG_NONE,
+            logLevel: LogLevel::LOG_ERROR,
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
@@ -448,7 +484,7 @@ impl InputConfig {
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: id,
                 physicalSources: physical_sources,
-                logLevel: LogLevel::LOG_NONE,
+                logLevel: LogLevel::LOG_ERROR,
             };
             let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -561,7 +597,7 @@ impl InputConfig {
                         },
                     }
                 ],
-                logLevel: LogLevel::LOG_NONE,
+                logLevel: LogLevel::LOG_ERROR,
             };
             let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;

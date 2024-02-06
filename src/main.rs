@@ -20,8 +20,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_no_reconfig.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconf.toml");
-    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_no_reconf.toml");
+    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_no_reconf.toml");
     let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf.toml");
+    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_static_multiple_fixed_source_iterate.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
@@ -48,7 +49,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         s.store(true, Ordering::SeqCst);
     }).expect("TODO: panic message");
 
-    for mut experiment in experiments {
+    let total_number_of_runs = experiments.len();
+    for (index, experiment) in experiments.iter_mut().enumerate() {
+        println!("Starting experiment {} of {}", index, total_number_of_runs);
 
         //start source input server
         let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
@@ -86,6 +89,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     file.flush();
                     break;
                 }
+
+                let current_time = SystemTime::now();
+                if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                    if elapsed_time > experiment_duration * 2 {
+                        let mut error_file = File::create(&experiment.generated_folder.join("error.txt")).unwrap();
+                        file.write_all(format!("Aborted experiment after {} seconds", elapsed_time.as_secs()).as_bytes()).expect("Error while writing error message to file");
+                        break
+                    }
+                }
             }        //shutdown_triggered.store(true, SeqCst);
 
             while !shutdown_triggered.load(Ordering::SeqCst) {
@@ -121,6 +133,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         experiment.kill_processes()?;
         source_input_server_process.kill()?;
+        println!("Finished experiment {} of {}", index, total_number_of_runs);
         create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
             break;

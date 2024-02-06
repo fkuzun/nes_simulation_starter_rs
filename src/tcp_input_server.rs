@@ -55,7 +55,13 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
             if let Ok(received) = receiver.recv() {
                 if let Some(data) = received {
                     // Write data into the socket
-                    &stream.write_all(&data).unwrap();
+                    match  &stream.write_all(&data) {
+                        Ok(_) => {}
+                        Err(err) => {
+                            eprintln!("Error writing to socket: {}", err);
+                            break;
+                        }
+                    }
                 } else {
                     break
                 }
