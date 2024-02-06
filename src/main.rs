@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fmt::format;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::net::TcpListener;
 use std::ops::Add;
@@ -29,13 +29,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
 
 
-
     let simulation_config = SimulationConfig {
         nes_root_dir,
         relative_worker_path,
         relative_coordinator_path,
         input_config_path,
-        output_directory
+        output_directory,
     };
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
@@ -50,8 +49,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }).expect("TODO: panic message");
 
     let total_number_of_runs = experiments.len();
-    for (index, experiment) in experiments.iter_mut().enumerate() {
-        println!("Starting experiment {} of {}", index, total_number_of_runs);
+    'all_experiments: for (index, experiment) in experiments.iter_mut().enumerate() {
+        let run_number = index + 1;
 
         //start source input server
         let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
@@ -65,76 +64,78 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
         let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
-        let experiment_start = SystemTime::now();
-        if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered)) {
-            //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
-            let desired_line_count = experiment.total_number_of_tuples_to_ingest;
-            // Bind the TCP listener to the specified address and port
-            let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
-            let mut line_count = 0; // Counter for the lines written
-            // Open the CSV file for writing
-            let mut file = File::create(&experiment.experiment_output_path).unwrap();
 
-            // Accept incoming connections and handle them
-            for stream in listener.incoming() {
-                let stream = stream.unwrap();
+        let mut success = false;
+        for attempt in 1..=10 {
+            println!("Starting experiment {} of {}, attempt {}", run_number, total_number_of_runs, attempt);
+            let experiment_start = SystemTime::now();
+            if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered)) {
+                //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
+                let desired_line_count = experiment.total_number_of_tuples_to_ingest;
+                // Bind the TCP listener to the specified address and port
+                let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
+                let mut line_count = 0; // Counter for the lines written
+                // Open the CSV file for writing
+                let mut file = File::create(&experiment.experiment_output_path).unwrap();
 
-                // Handle the connection
-                if let Err(err) = handle_connection(stream, &mut line_count, desired_line_count, &mut file) {
-                    eprintln!("Error handling connection: {}", err);
-                }
+                // Accept incoming connections and handle them
+                for stream in listener.incoming() {
+                    let stream = stream.unwrap();
 
-                // Check if the maximum number of lines has been written
-                if line_count >= desired_line_count as usize {
-                    file.flush();
-                    break;
-                }
+                    // Handle the connection
+                    if let Err(err) = handle_connection(stream, &mut line_count, desired_line_count, &mut file) {
+                        eprintln!("Error handling connection: {}", err);
+                    }
 
-                let current_time = SystemTime::now();
-                if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                    if elapsed_time > experiment_duration * 2 {
-                        let mut error_file = File::create(&experiment.generated_folder.join("error.txt")).unwrap();
-                        file.write_all(format!("Aborted experiment after {} seconds", elapsed_time.as_secs()).as_bytes()).expect("Error while writing error message to file");
-                        break
+                    // Check if the maximum number of lines has been written
+                    if line_count >= desired_line_count as usize {
+                        file.flush();
+                        success = true;
+                        break;
+                    }
+
+                    let current_time = SystemTime::now();
+                    if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                        if elapsed_time > experiment_duration * 2 {
+                            //let mut error_file = File::create(&experiment.generated_folder.join("error.txt")).unwrap();
+                            let mut error_file = OpenOptions::new()
+                                .append(true)
+                                .create(true)
+                                .open(&experiment.generated_folder.join("error.txt"))
+                                .unwrap();
+                            let error_string = format!("Aborted experiment after {} seconds in attempt {}", elapsed_time.as_secs(), attempt);
+                            println!("{}", error_string);
+                            error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
+                            break;
+                        }
                     }
                 }
-            }        //shutdown_triggered.store(true, SeqCst);
 
-            while !shutdown_triggered.load(Ordering::SeqCst) {
+                while !shutdown_triggered.load(Ordering::SeqCst) {
 
 
-                //todo: this code is probably not needed anymore as we are now listening on the tcp connection
-                let current_time = SystemTime::now();
-                if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                    if elapsed_time > experiment_duration + Duration::from_secs(10) {
-                        break
+                    //todo: this code is probably not needed anymore as we are now listening on the tcp connection
+                    let current_time = SystemTime::now();
+                    if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                        if elapsed_time > experiment_duration + Duration::from_secs(10) {
+                            break;
+                        }
                     }
+                    sleep(Duration::from_secs(1));
                 }
-                sleep(Duration::from_secs(1));
+            }
+
+            experiment.kill_processes()?;
+            source_input_server_process.kill()?;
+            println!("Finished experiment {} of {} on attempt {}", run_number, total_number_of_runs, attempt);
+            create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
+            if (shutdown_triggered.load(Ordering::SeqCst)) {
+                break;
+            }
+            if (success) {
+                break;
             }
         }
-
-
-        // loop {
-        //     // Check the file periodically
-        //     let line_count = count_lines_in_file(experiment.sink_output_path.as_path()).unwrap();
-        //     println!("Current line count: {} of {}", line_count, desired_line_count);
-        //
-        //     // Check if the desired line count is reached
-        //     if line_count >= desired_line_count.try_into().unwrap() {
-        //         println!("Desired line count reached!");
-        //         break;
-        //     }
-        //
-        //     // Wait for some time before checking again
-        //     sleep(Duration::from_secs(10)); // Wait for 10 seconds before checking again
-        // }
-
-
-        experiment.kill_processes()?;
-        source_input_server_process.kill()?;
-        println!("Finished experiment {} of {}", index, total_number_of_runs);
-        create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
             break;
         }

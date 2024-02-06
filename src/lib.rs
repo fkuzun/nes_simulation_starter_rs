@@ -269,6 +269,7 @@ pub struct ExperimentSetup {
 
 impl ExperimentSetup {
     pub fn start(&mut self, executable_paths: &NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+        self.fixed_worker_processes = vec![];
         self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered))?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered))?;
