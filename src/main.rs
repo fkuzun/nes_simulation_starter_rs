@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 // Use the runtime
                 rt.block_on(async {
-                    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await.unwrap();
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:12345").await.unwrap();
 
                     loop {
                         let timeout_duration = experiment_duration * 2;
