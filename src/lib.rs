@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
@@ -32,6 +32,7 @@ use crate::WorkerConfigType::Fixed;
 use serde_with::DurationMilliSeconds;
 use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
+use tokio::io::AsyncBufReadExt;
 
 pub mod analyze;
 
@@ -271,6 +272,7 @@ impl ExperimentSetup {
     pub fn start(&mut self, executable_paths: &NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
         self.kill_processes();
         self.fixed_worker_processes = vec![];
+        self.mobile_worker_processes = vec![];
         self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered))?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered))?;
@@ -906,25 +908,30 @@ enum WorkerConfigType {
 }
 
 
-pub fn handle_connection(stream: std::net::TcpStream, line_count: &mut usize, desired_line_count: u64, file: &mut File) -> Result<(), Box<dyn Error>> {
+pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<File>) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
-    let reader = BufReader::new(&stream);
-
+    let mut reader = tokio::io::BufReader::new(stream);
+    let mut line = String::new();
 
     // Iterate over the lines received from the client and write them to the CSV file
-    for line in reader.lines() {
-        let line = line?;
+    while let Ok(bytes_read) = reader.read_line(&mut line).await {
+        if bytes_read == 0 {
+            break; // EOF, so end the loop
+        }
+    // for line in reader.lines() {
+    //     let line = line?;
         writeln!(file, "{}", line)?;
 
         // Increment the line count
-        *line_count += 1;
+        //line_count += 1;
+        line_count.fetch_add(1, Ordering::SeqCst);
 
         // Check if the maximum number of lines has been written
-        if *line_count >= desired_line_count as usize {
+        if line_count.load(SeqCst) >= desired_line_count as usize {
             break;
         }
     }
-    println!("Received {} lines of {}", *line_count, desired_line_count);
+    println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);
 
     Ok(())
 }

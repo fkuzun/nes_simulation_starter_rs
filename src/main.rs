@@ -7,10 +7,13 @@ use std::ops::Add;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local};
+use tokio::task;
+use tokio::time::timeout;
 use simulation_runner_lib::*;
 use simulation_runner_lib::analyze::create_notebook;
 
@@ -49,10 +52,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         s.store(true, Ordering::SeqCst);
     }).expect("TODO: panic message");
 
+    //create runtime
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+
     let total_number_of_runs = experiments.len();
     'all_experiments: for (index, experiment) in experiments.iter_mut().enumerate() {
         let run_number = index + 1;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
+            experiment.kill_processes()?;
             break;
         }
 
@@ -80,47 +87,61 @@ fn main() -> Result<(), Box<dyn Error>> {
                 //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                 let desired_line_count = experiment.total_number_of_tuples_to_ingest;
                 // Bind the TCP listener to the specified address and port
-                let listener = TcpListener::bind("127.0.0.1:12345").unwrap();
-                let mut line_count = 0; // Counter for the lines written
+
+                let mut line_count = AtomicUsize::new(0); // Counter for the lines written
+                let line_count = Arc::new(line_count);
+                //let  line_count = 0; // Counter for the lines written
                 // Open the CSV file for writing
                 let mut file = File::create(&experiment.experiment_output_path).unwrap();
+                let mut file = Arc::new(file);
 
-                // Accept incoming connections and handle them
-                for stream in listener.incoming() {
-                    let stream = stream.unwrap();
+                // Use the runtime
+                rt.block_on(async {
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await.unwrap();
 
-                    // Handle the connection
-                    if let Err(err) = handle_connection(stream, &mut line_count, desired_line_count, &mut file) {
-                        eprintln!("Error handling connection: {}", err);
-                    }
+                    loop {
+                        let timeout_duration = experiment_duration * 2;
+                        let accept_result = timeout(timeout_duration, listener.accept()).await;
 
-                    // Check if the maximum number of lines has been written
-                    if line_count >= desired_line_count as usize {
-                        file.flush();
-                        success = true;
-                        break;
-                    }
-
-                    let current_time = SystemTime::now();
-                    println!("Checking timeout at: {:?}", current_time);
-                    if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                        if elapsed_time > experiment_duration * 2 {
-                            //let mut error_file = File::create(&experiment.generated_folder.join("error.txt")).unwrap();
-                            let mut error_file = OpenOptions::new()
-                                .append(true)
-                                .create(true)
-                                .open(&experiment.generated_folder.join("error.txt"))
-                                .unwrap();
-                            let error_string = format!("Aborted experiment after {} seconds in attempt {}", elapsed_time.as_secs(), attempt);
-                            println!("{}", error_string);
-                            error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
+                        match accept_result {
+                            Ok(Ok((stream, _))) => {
+                                // Handle the connection
+                                //tokio::spawn(handle_connection(stream, &mut line_count, desired_line_count, &mut file));
+                                let mut file_clone = file.clone();
+                                let mut line_count_clone = line_count.clone();
+                                let desired_line_count_copy = desired_line_count;
+                                tokio::spawn(async move {
+                                    if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone).await {
+                                        eprintln!("Error handling connection: {}", e);
+                                    }
+                                });
+                            }
+                            Ok(Err(e)) => {
+                                eprintln!("Error accepting connection: {}", e);
+                            }
+                            Err(_) => {
+                                // Handle timeout here
+                                let mut error_file = OpenOptions::new()
+                                    .append(true)
+                                    .create(true)
+                                    .open(&experiment.generated_folder.join("error.txt"))
+                                    .unwrap();
+                                let error_string = format!("Aborted experiment in attempt {}", attempt);
+                                println!("{}", error_string);
+                                error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
+                                break;
+                            }
+                        }
+                        // Check if the maximum number of lines has been written
+                        if line_count.load(SeqCst) >= desired_line_count as usize {
+                            file.flush().expect("TODO: panic message");
+                            success = true;
                             break;
                         }
                     }
-                }
+                });
 
                 while !shutdown_triggered.load(Ordering::SeqCst) {
-
 
                     //todo: this code is probably not needed anymore as we are now listening on the tcp connection
                     let current_time = SystemTime::now();
@@ -136,7 +157,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             experiment.kill_processes()?;
             source_input_server_process.kill()?;
             let current_time = SystemTime::now();
-            println!("Finished experiment {} of {} on attempt {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
+            println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
             create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
             if (shutdown_triggered.load(Ordering::SeqCst)) {
                 break;
