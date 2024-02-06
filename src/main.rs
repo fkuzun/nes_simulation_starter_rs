@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use chrono::{DateTime, Local};
 use simulation_runner_lib::*;
 use simulation_runner_lib::analyze::create_notebook;
 
@@ -51,6 +52,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let total_number_of_runs = experiments.len();
     'all_experiments: for (index, experiment) in experiments.iter_mut().enumerate() {
         let run_number = index + 1;
+        if (shutdown_triggered.load(Ordering::SeqCst)) {
+            break;
+        }
 
         //start source input server
         let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
@@ -65,10 +69,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
 
+        println!("Starting experiment {} of {}", run_number, total_number_of_runs);
+        println!("{}", toml::to_string(&experiment.input_config).unwrap());
         let mut success = false;
         for attempt in 1..=10 {
-            println!("Starting experiment {} of {}, attempt {}", run_number, total_number_of_runs, attempt);
             let experiment_start = SystemTime::now();
+            let now: DateTime<Local> = Local::now();
+            println!("{}: Starting attempt {}", now, attempt);
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered)) {
                 //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                 let desired_line_count = experiment.total_number_of_tuples_to_ingest;
@@ -95,6 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
 
                     let current_time = SystemTime::now();
+                    println!("Checking timeout at: {:?}", current_time);
                     if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
                         if elapsed_time > experiment_duration * 2 {
                             //let mut error_file = File::create(&experiment.generated_folder.join("error.txt")).unwrap();
@@ -127,7 +135,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             experiment.kill_processes()?;
             source_input_server_process.kill()?;
-            println!("Finished experiment {} of {} on attempt {}", run_number, total_number_of_runs, attempt);
+            let current_time = SystemTime::now();
+            println!("Finished experiment {} of {} on attempt {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
             create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
             if (shutdown_triggered.load(Ordering::SeqCst)) {
                 break;
@@ -136,6 +145,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 break;
             }
         }
+        experiment.kill_processes()?;
+        source_input_server_process.kill()?;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
             break;
         }
