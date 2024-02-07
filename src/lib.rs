@@ -915,22 +915,23 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
 
     // Iterate over the lines received from the client and write them to the CSV file
     while let Ok(bytes_read) = reader.read_line(&mut line).await {
+        // Check if the maximum number of lines has been written
+        if line_count.load(SeqCst) >= desired_line_count as usize {
+            break;
+        }
         if bytes_read == 0 {
             break; // EOF, so end the loop
         }
     // for line in reader.lines() {
     //     let line = line?;
-        writeln!(file, "{}", line)?;
+        //writeln!(file, "{}", line)?;
 
         // Increment the line count
         //line_count += 1;
         line_count.fetch_add(1, Ordering::SeqCst);
 
-        // Check if the maximum number of lines has been written
-        if line_count.load(SeqCst) >= desired_line_count as usize {
-            break;
-        }
     }
+    write!(file, "{}", line)?;
     println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);
 
     Ok(())

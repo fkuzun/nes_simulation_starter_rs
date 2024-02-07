@@ -31,6 +31,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
     let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
+    let abort_experiment_info_directory = PathBuf::from("/home/x/uni/ba/experiments");
+    //let output_directory = PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments");
 
 
     let simulation_config = SimulationConfig {
@@ -157,7 +159,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             experiment.kill_processes()?;
             source_input_server_process.kill()?;
             let current_time = SystemTime::now();
-            println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
+            println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?} succes: {}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start), success);
             create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
             if (shutdown_triggered.load(Ordering::SeqCst)) {
                 break;
