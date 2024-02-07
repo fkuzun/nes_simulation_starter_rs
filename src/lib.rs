@@ -408,7 +408,7 @@ impl InputConfig {
         //let sink_output_path = generated_folder.join("out.csv");
         //todo: set port here
         let sink_output_path = generated_folder.join("replace_me.csv");
-        let experiment_output_path = generated_folder.join("out.csv");
+        let experiment_output_path = generated_folder.join("out");
 
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
@@ -908,13 +908,19 @@ enum WorkerConfigType {
 }
 
 
-pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<File>) -> Result<(), Box<dyn Error>> {
+pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<File>, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
     let mut reader = tokio::io::BufReader::new(stream);
     let mut line = String::new();
 
     // Iterate over the lines received from the client and write them to the CSV file
     while let Ok(bytes_read) = reader.read_line(&mut line).await {
+        //exit if shutdown was triggered
+        if (shutdown_triggered.load(SeqCst)) {
+            break;
+        }
+        // Increment the line count
+        line_count.fetch_add(1, Ordering::SeqCst);
         // Check if the maximum number of lines has been written
         if line_count.load(SeqCst) >= desired_line_count as usize {
             break;
@@ -922,14 +928,6 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
         if bytes_read == 0 {
             break; // EOF, so end the loop
         }
-    // for line in reader.lines() {
-    //     let line = line?;
-        //writeln!(file, "{}", line)?;
-
-        // Increment the line count
-        //line_count += 1;
-        line_count.fetch_add(1, Ordering::SeqCst);
-
     }
     write!(file, "{}", line)?;
     println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);
