@@ -65,6 +65,7 @@ fn port_is_available(port: u16) -> bool {
 pub struct MultiSimulationInputConfig {
     pub enable_query_reconfiguration: Vec<bool>,
     pub tuples_per_buffer: Vec<usize>,
+    pub speedup_factor: Vec<f64>,
     #[serde_as(as = "Vec<DurationMilliSeconds<u64>>")]
     pub gathering_interval: Vec<Duration>,
     pub default_config: InputConfig,
@@ -88,6 +89,10 @@ impl MultiSimulationInputConfig {
         String::from("gatheringInterval")
     }
 
+    pub fn get_speedup_short_name(&self) -> String {
+        String::from("speedup")
+    }
+
     pub fn get_short_name_value_separator(&self) -> String {
         String::from(":")
     }
@@ -106,25 +111,30 @@ impl MultiSimulationInputConfig {
         for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
             for &tuples_per_buffer in &self.tuples_per_buffer {
                 for &gathering_interval in &self.gathering_interval {
-                    let config = InputConfig {
-                        parameters: Parameters {
-                            enable_query_reconfiguration,
-                            //source_input_server_port,
-                            ..self.default_config.parameters.clone()
-                        },
-                        default_source_input: DefaultSourceInput {
-                            tuples_per_buffer,
-                            gathering_interval,
-                            ..self.default_config.default_source_input.clone()
-                        },
-                        ..self.default_config.clone()
-                    };
-                    //source_input_server_port += 1;
-                    let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
-                    short_name.push_str(&self.get_short_name_to_short_name_separator());
-                    short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
-                    short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
-                    configs.push((short_name, config));
+                    for &speedup_factor in &self.speedup_factor {
+                        let config = InputConfig {
+                            parameters: Parameters {
+                                enable_query_reconfiguration,
+                                speedup_factor,
+                                //source_input_server_port,
+                                ..self.default_config.parameters.clone()
+                            },
+                            default_source_input: DefaultSourceInput {
+                                tuples_per_buffer,
+                                gathering_interval,
+                                ..self.default_config.default_source_input.clone()
+                            },
+                            ..self.default_config.clone()
+                        };
+
+                        //source_input_server_port += 1;
+                        let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
+                        short_name.push_str(&self.get_short_name_to_short_name_separator());
+                        short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
+                        short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
+                        short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
+                        configs.push((short_name, config));
+                    }
                 }
             }
             // let config = InputConfig {
@@ -138,11 +148,9 @@ impl MultiSimulationInputConfig {
             // configs.push((short_name, config));
         };
         configs
-
-
     }
-
 }
+
 #[derive(Deserialize, Debug)]
 pub struct SimulationConfig {
     pub nes_root_dir: PathBuf,
@@ -336,7 +344,6 @@ impl ExperimentSetup {
             return Err("Could not submit query, received invalid query id 0".into());
         };
         Ok(())
-
     }
 
     fn add_edges(&self, rest_port: u16) -> Result<(), Box<dyn Error>> {
@@ -382,13 +389,12 @@ impl ExperimentSetup {
         }
         //kill coordinator
         match (self.coordinator_process.take()) {
-            None => {println!("coordinator process not found")},
-            Some(mut p) => {p.kill()?}
+            None => { println!("coordinator process not found") }
+            Some(mut p) => { p.kill()? }
         }
 
 
-
-            //.ok_or("Coordinator process not found")?.kill()?;
+        //.ok_or("Coordinator process not found")?.kill()?;
         Ok(())
     }
 
@@ -731,12 +737,12 @@ struct MobileWorkerWaypoint {
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize)]
-struct PrecalculatedReconnect {
+pub struct PrecalculatedReconnect {
     #[serde(rename = "column1")]
-    parent_id: u64,
+    pub parent_id: u64,
     #[serde_as(as = "DurationNanoSeconds<u64>")]
-    #[serde(rename = "column3")]
-    offset: Duration,
+    #[serde(rename = "column2")]
+    pub offset: Duration,
 }
 
 
@@ -819,7 +825,7 @@ struct MobileWorkerConfig {
     mobility: Mobilityconfig,
     physicalSources: Vec<PhysicalSource>,
     fieldNodeLocationCoordinates: String,
-    logLevel: LogLevel
+    logLevel: LogLevel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -832,7 +838,7 @@ struct FixedWorkerConfig {
     workerId: u64,
     #[serde(skip_serializing_if = "std::vec::Vec::is_empty")]
     physicalSources: Vec<PhysicalSource>,
-    logLevel: LogLevel
+    logLevel: LogLevel,
     //fieldNodeLocationCoordinates: (f64, f64),
 }
 
@@ -1015,7 +1021,7 @@ fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Res
         if let Ok(reply) = reqwest::blocking::get("http://127.0.0.1:8081/v1/nes/connectivity/check") {
             if reply.json::<ConnectivityReply>().unwrap().success {
                 println!("Coordinator has connected");
-                return  Ok(());
+                return Ok(());
             }
             let input: String = text_io::read!("{}\n");
             std::thread::sleep(time::Duration::from_secs(1));
@@ -1035,7 +1041,7 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
             println!("topology contains {} nodes", size);
             if let Some(expected) = expected_node_count {
                 if size == expected {
-                    return  Ok(size);
+                    return Ok(size);
                 }
                 println!("number of nodes not reached");
                 std::thread::sleep(time::Duration::from_secs(1));

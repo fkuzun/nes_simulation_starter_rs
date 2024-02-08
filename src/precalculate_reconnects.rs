@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         vec![]
     };
+    // let fixed_nodes_hosting_sources = [36, 72, 19, 40, 34, 68, 55, 37, 35, 22];
 
     let mut timestamp = Duration::new(0, 0);
     let mut csv_writer = csv::WriterBuilder::new()
