@@ -960,23 +960,46 @@ enum WorkerConfigType {
 }
 
 
-pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<File>, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<File>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
-    let mut reader = tokio::io::BufReader::new(stream);
+    //let mut reader = tokio::io::BufReader::new(stream);
     let mut line = String::new();
+    let mut buf = vec![];
 
     // Iterate over the lines received from the client and write them to the CSV file
-    while let Ok(bytes_read) = reader.read_line(&mut line).await {
+    while let Ok(bytes_read) = stream.try_read(&mut buf) {
+    //while let Ok(bytes_read) = reader.read_line(&mut line).await {
         //exit if shutdown was triggered
         if (shutdown_triggered.load(SeqCst)) {
             break;
         }
+        let current_time = SystemTime::now();
+        if let Ok(elapsed_time) = current_time.duration_since(start_time) {
+            if elapsed_time > experiment_duration + Duration::from_secs(30) {
+                break;
+            }
+        }
+
+
         // Increment the line count
-        line_count.fetch_add(1, Ordering::SeqCst);
+        //line_count.fetch_add(1, Ordering::SeqCst);
         // Check if the maximum number of lines has been written
-        if line_count.load(SeqCst) >= desired_line_count as usize {
+        // if line_count.load(SeqCst) >= desired_line_count as usize {
+        //     break;
+        // }
+        // if bytes_read == 0 {
+        //     break; // EOF, so end the loop
+        // }
+    }
+
+    let mut reader = tokio::io::BufReader::new(&*buf);
+
+    while let Ok(bytes_read) = reader.read_line(&mut line).await {
+        if (shutdown_triggered.load(SeqCst)) {
             break;
         }
+        line_count.fetch_add(1, Ordering::SeqCst);
+
         if bytes_read == 0 {
             break; // EOF, so end the loop
         }

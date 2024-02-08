@@ -118,9 +118,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     let mut file_clone = file.clone();
                                     let mut line_count_clone = line_count.clone();
                                     let mut shutdown_triggered_clone = shutdown_triggered.clone();
+                                    let mut experiment_start_clone = experiment_start.clone();
+                                    let mut experiment_dureation_clone = experiment_duration.clone();
                                     let desired_line_count_copy = desired_line_count;
                                     tokio::spawn(async move {
-                                        if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone).await {
+                                        if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone, experiment_start_clone, experiment_dureation_clone).await {
                                             eprintln!("Error handling connection: {}", e);
                                         }
                                     });
