@@ -96,46 +96,53 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let file_path = format!("{}_run:{}.csv", &experiment.experiment_output_path.to_str().unwrap(), attempt);
                 let mut file = File::create(&file_path).unwrap();
                 let mut file = Arc::new(file);
+                let query_string = experiment.input_config.parameters.query_string.clone();
 
                 // Use the runtime
                 rt.block_on(async {
-                    let listener = tokio::net::TcpListener::bind("127.0.0.1:12345").await.unwrap();
+                    //todo: in the future we need to implement on the nes side parsing of ip and not only the port
+                    //let listener = tokio::net::TcpListener::bind("127.0.0.1:12345").await.unwrap();
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                    let listener_port = listener.local_addr().unwrap().port();
+                    println!("Listening for output tuples on port {}", listener_port);
+                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_query(listener_port, query_string).is_ok()}).await;
+                    if let Ok(true) = deployed {
+                        while !shutdown_triggered.load(Ordering::SeqCst) {
+                            let timeout_duration = experiment_duration * 2;
+                            let accept_result = timeout(timeout_duration, listener.accept()).await;
 
-                    while !shutdown_triggered.load(Ordering::SeqCst) {
-                        let timeout_duration = experiment_duration * 2;
-                        let accept_result = timeout(timeout_duration, listener.accept()).await;
-
-                        match accept_result {
-                            Ok(Ok((stream, _))) => {
-                                // Handle the connection
-                                //tokio::spawn(handle_connection(stream, &mut line_count, desired_line_count, &mut file));
-                                let mut file_clone = file.clone();
-                                let mut line_count_clone = line_count.clone();
-                                let mut shutdown_triggered_clone = shutdown_triggered.clone();
-                                let desired_line_count_copy = desired_line_count;
-                                tokio::spawn(async move {
-                                    if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone).await {
-                                        eprintln!("Error handling connection: {}", e);
-                                    }
-                                });
+                            match accept_result {
+                                Ok(Ok((stream, _))) => {
+                                    // Handle the connection
+                                    //tokio::spawn(handle_connection(stream, &mut line_count, desired_line_count, &mut file));
+                                    let mut file_clone = file.clone();
+                                    let mut line_count_clone = line_count.clone();
+                                    let mut shutdown_triggered_clone = shutdown_triggered.clone();
+                                    let desired_line_count_copy = desired_line_count;
+                                    tokio::spawn(async move {
+                                        if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone).await {
+                                            eprintln!("Error handling connection: {}", e);
+                                        }
+                                    });
+                                }
+                                Ok(Err(e)) => {
+                                    eprintln!("Error accepting connection: {}", e);
+                                }
+                                Err(_) => {
+                                    break;
+                                }
                             }
-                            Ok(Err(e)) => {
-                                eprintln!("Error accepting connection: {}", e);
-                            }
-                            Err(_) => {
+                            // Check if the maximum number of lines has been written
+                            if line_count.load(SeqCst) >= desired_line_count as usize {
+                                file.flush().expect("TODO: panic message");
                                 break;
                             }
-                        }
-                        // Check if the maximum number of lines has been written
-                        if line_count.load(SeqCst) >= desired_line_count as usize {
-                            file.flush().expect("TODO: panic message");
-                            break;
-                        }
-                        //check timeout
-                        let current_time = SystemTime::now();
-                        if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                            if elapsed_time > experiment_duration + Duration::from_secs(30) {
-                                break;
+                            //check timeout
+                            let current_time = SystemTime::now();
+                            if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                                if elapsed_time > experiment_duration + Duration::from_secs(30) {
+                                    break;
+                                }
                             }
                         }
                     }

@@ -315,12 +315,12 @@ impl ExperimentSetup {
 
         sleep(Duration::from_secs(2));
 
+        Ok(())
+    }
+
+    pub fn submit_query(output_port: u16, query_string: String) -> Result<(), Box<dyn Error>> {
         let execute_query_request = ExecuteQueryRequest {
-            //user_query: "Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"/tmp/test_sink\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));".to_string(),
-            //user_query: format!("Query::from(\"values\").sink(FileSinkDescriptor::create(\n  \"{}\",\n  \"CSV_FORMAT\",\n  \"true\" // *\"true\"* for append, *\"false\"* for overwrite\n  ));", self.sink_output_path.display()).to_string(),
-            //user_query: format!("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{}\", \"CSV_FORMAT\", \"true\"));", self.sink_output_path.display()).to_string(),
-            //user_query: String::from("Query::from(\"values\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{OUTPUT}\", \"CSV_FORMAT\", \"true\"));").replace("{OUTPUT}", self.sink_output_path.to_str().unwrap()),
-            user_query: self.input_config.parameters.query_string.replace("{OUTPUT}", self.sink_output_path.to_str().unwrap()),
+            user_query: query_string.replace("{OUTPUT}", &output_port.to_string()),
             placement: PlacementStrategyType::BottomUp,
         };
         let client = reqwest::blocking::Client::new();
@@ -329,9 +329,9 @@ impl ExperimentSetup {
         let reply: SubmitQueryResponse = result.json()?;
         if reply.queryId == 0 {
             return Err("Could not submit query, received invalid query id 0".into());
-        }
-
+        };
         Ok(())
+
     }
 
     fn add_edges(&self) -> Result<(), Box<dyn Error>> {
@@ -376,7 +376,14 @@ impl ExperimentSetup {
             fixedWorker.kill().expect("could not kill worker");
         }
         //kill coordinator
-        self.coordinator_process.take().ok_or("Coordinator process not found")?.kill()?;
+        match (self.coordinator_process.take()) {
+            None => {println!("coordinator process not found")},
+            Some(mut p) => {p.kill()?}
+        }
+
+
+
+            //.ok_or("Coordinator process not found")?.kill()?;
         Ok(())
     }
 
