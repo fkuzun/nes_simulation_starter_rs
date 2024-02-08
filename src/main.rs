@@ -170,8 +170,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 //todo: move inside the experiment impl
                 println!("Experiment failed to start");
-                experiment.kill_processes()?;
             }
+            experiment.kill_processes()?;
+            source_input_server_process.kill()?;
         }
         if (shutdown_triggered.load(Ordering::SeqCst)) {
             break;
