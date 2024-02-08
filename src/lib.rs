@@ -10,7 +10,7 @@ use std::env::consts::OS;
 use std::ffi::OsStr;
 use std::fs::{File, read_to_string};
 use std::net::TcpListener;
-use std::ops::{Add, Sub};
+use std::ops::{Add, Range, Sub};
 use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -39,6 +39,25 @@ pub mod analyze;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
+const PORT_RANGE: std::ops::Range<u16> = 10_000..20_000;
+
+
+fn get_available_port(mut range: Range<u16>) -> Option<u16> {
+    range.find(|port| port_is_available(*port))
+}
+
+fn port_is_available(port: u16) -> bool {
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
+//const START_OF_SOURCE_INPUT_SERVER_PORT_RANGE: u16 = 10_000;
+//const START_OF_SINK_OUTPUT_SERVER_PORT_RANGE: u16 = 11_000;
+//const START_OF_SINK_OUTPUT_SERVER_PORT_RANGE: u16 = 11_000;
+
+//fn get_output_server_port()
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -82,12 +101,14 @@ impl MultiSimulationInputConfig {
 
     pub fn generate_input_configs(&self) -> Vec<(String, InputConfig)> {
         let mut configs = vec![];
+        //let mut source_input_server_port = START_OF_SOURCE_INPUT_SERVER_PORT_RANGE;
         for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
             for &tuples_per_buffer in &self.tuples_per_buffer {
                 for &gathering_interval in &self.gathering_interval {
                     let config = InputConfig {
                         parameters: Parameters {
                             enable_query_reconfiguration,
+                            //source_input_server_port,
                             ..self.default_config.parameters.clone()
                         },
                         default_source_input: DefaultSourceInput {
@@ -97,6 +118,7 @@ impl MultiSimulationInputConfig {
                         },
                         ..self.default_config.clone()
                     };
+                    //source_input_server_port += 1;
                     let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
                     short_name.push_str(&self.get_short_name_to_short_name_separator());
                     short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
@@ -367,6 +389,7 @@ impl ExperimentSetup {
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
                 .arg("--logLevel=LOG_ERROR")
+                // .arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
 
             self.fixed_worker_processes.push(process);
@@ -393,6 +416,7 @@ impl ExperimentSetup {
             .arg("--restServerCorsAllowedOrigin=*")
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
             .arg("--logLevel=LOG_ERROR")
+            // .arg("--logLevel=LOG_DEBUG")
             .spawn()?);
 
         //wait until coordinator is online

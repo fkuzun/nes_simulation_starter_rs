@@ -70,7 +70,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         println!("Starting experiment {} of {}", run_number, total_number_of_runs);
         println!("{}", toml::to_string(&experiment.input_config).unwrap());
-        let mut success = false;
         for attempt in 1..=1 {
             //start source input server
             let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
@@ -157,7 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 experiment.kill_processes()?;
                 source_input_server_process.kill()?;
                 let current_time = SystemTime::now();
-                println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?} succes: {}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start), success);
+                println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
                 //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
                 create_notebook(&PathBuf::from(&file_path), &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
                 if (shutdown_triggered.load(Ordering::SeqCst)) {

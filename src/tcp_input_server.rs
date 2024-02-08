@@ -19,8 +19,14 @@ fn main() -> std::io::Result<()> {
     let gathering_interval = args[5].parse::<u64>().expect("Invalid gathering interval");
 
     // Create a TCP listener bound to a specific address and port
-    let listener = TcpListener::bind((hostname, port))?;
-    println!("Server listening on port 54321...");
+    let listener = match TcpListener::bind((hostname, port)) {
+        Ok(listener) => listener,
+        Err(e) => {
+            eprintln!("Error creating TCP listener for input server on port {}: {}", port, e);
+            std::process::exit(1);
+        }
+    };
+    println!("Server listening on port {}...", port);
 
     let gather_interval = std::time::Duration::from_millis(gathering_interval);
 
