@@ -967,8 +967,8 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
     let mut buf = vec![];
 
     // Iterate over the lines received from the client and write them to the CSV file
-    while let Ok(bytes_read) = stream.try_read(&mut buf) {
-    //while let Ok(bytes_read) = reader.read_line(&mut line).await {
+    loop {
+        //while let Ok(bytes_read) = reader.read_line(&mut line).await {
         //exit if shutdown was triggered
         if (shutdown_triggered.load(SeqCst)) {
             break;
@@ -990,6 +990,8 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
         // if bytes_read == 0 {
         //     break; // EOF, so end the loop
         // }
+        if let Ok(bytes_read) = stream.try_read_buf(&mut buf) {}
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     let mut reader = tokio::io::BufReader::new(&*buf);
@@ -998,11 +1000,11 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
         if (shutdown_triggered.load(SeqCst)) {
             break;
         }
-        line_count.fetch_add(1, Ordering::SeqCst);
 
         if bytes_read == 0 {
             break; // EOF, so end the loop
         }
+        line_count.fetch_add(1, Ordering::SeqCst);
     }
     write!(file, "{}", line)?;
     println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);

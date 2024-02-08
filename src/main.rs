@@ -167,8 +167,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let current_time = SystemTime::now();
                 println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
                 let mut tuple_count_string = format!("{},{},{}\n", attempt, line_count.load(SeqCst), desired_line_count);
-                tuple_count_string = file_path.clone().add(&"tuple_count.csv");
-                let mut tuple_count_file = File::create(PathBuf::from(tuple_count_string)).unwrap();
+                let tuple_count_path = file_path.clone().add("tuple_count.csv");
+                let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
+                tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
                 //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
                 create_notebook(&PathBuf::from(&file_path), &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
                 if (shutdown_triggered.load(Ordering::SeqCst)) {
