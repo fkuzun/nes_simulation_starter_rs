@@ -24,6 +24,7 @@ use std::time::{Duration, SystemTime};
 use sync::atomic;
 use chrono::Local;
 use nes_tools::launch::Launch;
+use nes_tools::query::SubmitQueryResponse;
 use nes_tools::topology::{AddEdgeReply, AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType};
 use serde_with::serde_as;
 use yaml_rust::{YamlEmitter, YamlLoader};
@@ -303,6 +304,10 @@ impl ExperimentSetup {
         let client = reqwest::blocking::Client::new();
         let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-query")
             .json(&execute_query_request).send()?;
+        let reply: SubmitQueryResponse = result.json()?;
+        if reply.queryId == 0 {
+            return Err("Could not submit query, received invalid query id 0".into());
+        }
 
         Ok(())
     }
@@ -320,8 +325,10 @@ impl ExperimentSetup {
             let result = client.post("http://127.0.0.1:8081/v1/nes/topology/addAsChild")
                 .json(&link_request).send()?;
             //println!("{}", result.text().unwrap());
-            let reply: AddEdgeReply = result.json().unwrap();
-            assert!(reply.success);
+            let reply: AddEdgeReply = result.json()?;
+            if !reply.success {
+                return Err("Could not add edge".into());
+            }
             let link_request = AddEdgeRequest {
                 parent_id: 1,
                 child_id: *child_id,
@@ -329,8 +336,10 @@ impl ExperimentSetup {
             let result = client.delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
                 .json(&link_request).send()?;
             //assert!(result.json().unwrap());
-            let reply: AddEdgeReply = result.json().unwrap();
-            assert!(reply.success);
+            let reply: AddEdgeReply = result.json()?;
+            if !reply.success {
+                return Err("Could not add edge".into());
+            }
         };
         Ok(())
     }
@@ -962,24 +971,24 @@ fn create_folder_with_timestamp(mut path: PathBuf, prefix: &str) -> PathBuf {
 }
 
 fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>> {
-    loop {
+    for i in 0..10 {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
         }
         if let Ok(reply) = reqwest::blocking::get("http://127.0.0.1:8081/v1/nes/connectivity/check") {
             if reply.json::<ConnectivityReply>().unwrap().success {
                 println!("Coordinator has connected");
-                break Ok(());
+                return  Ok(());
             }
             let input: String = text_io::read!("{}\n");
             std::thread::sleep(time::Duration::from_secs(1));
         }
-        //todo: sleep
     }
+    Err(String::from("Coordinator did not connect").into())
 }
 
 fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<usize, Box<dyn Error>> {
-    loop {
+    for i in 0..10 {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
         }
@@ -988,15 +997,14 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
             println!("topology contains {} nodes", size);
             if let Some(expected) = expected_node_count {
                 if size == expected {
-                    break Ok(size);
+                    return  Ok(size);
                 }
                 println!("number of nodes not reached");
                 std::thread::sleep(time::Duration::from_secs(1));
-            } else {
-                break Ok(size);
             }
         }
     }
+    Err(String::from("Expected node count not reached in topology").into())
 }
 
 fn create_csv_file(file_path: &str, id: u32, num_rows: usize) -> Result<(), Box<dyn Error>> {

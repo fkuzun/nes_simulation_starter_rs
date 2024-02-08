@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_no_reconfig.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_no_reconf.toml");
-    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf.toml");
+    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_static_multiple_fixed_source_iterate.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_reconf.toml");
     //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         relative_worker_path,
         relative_coordinator_path,
         input_config_path,
-        output_directory,
+        output_directory: output_directory.clone(),
     };
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
@@ -66,13 +66,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             break;
         }
 
-
         let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
 
         println!("Starting experiment {} of {}", run_number, total_number_of_runs);
         println!("{}", toml::to_string(&experiment.input_config).unwrap());
         let mut success = false;
-        for attempt in 1..=5 {
+        for attempt in 1..=1 {
             //start source input server
             let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
                 //todo: do not hard code
@@ -125,15 +124,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 eprintln!("Error accepting connection: {}", e);
                             }
                             Err(_) => {
-                                // Handle timeout here
-                                let mut error_file = OpenOptions::new()
-                                    .append(true)
-                                    .create(true)
-                                    .open(&experiment.generated_folder.join("error.txt"))
-                                    .unwrap();
-                                let error_string = format!("Aborted experiment in attempt {}", attempt);
-                                println!("{}", error_string);
-                                error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
                                 break;
                             }
                         }
@@ -151,12 +141,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                 });
+                if line_count.load(SeqCst) < desired_line_count as usize {
+                    // Handle timeout here
+                    let mut error_file = OpenOptions::new()
+                        .append(true)
+                        .create(true)
+                        //.open(&experiment.generated_folder.join("error.txt"))
+                        .open(&output_directory.join("error.csv"))
+                        .unwrap();
+                    //let error_string = format!("Aborted experiment in attempt {}", attempt);
+                    let error_string = format!("{},{},{},{}", output_directory.to_str().ok_or("Could not convert output directory to string")?, attempt, line_count.load(SeqCst), desired_line_count);
+                    println!("Writing error string: {}", error_string);
+                    error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
+                }
                 experiment.kill_processes()?;
                 source_input_server_process.kill()?;
                 let current_time = SystemTime::now();
                 println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?} succes: {}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start), success);
                 //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
-                //create_notebook(&PathBuf::from(&file_path), &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
+                create_notebook(&PathBuf::from(&file_path), &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
                 if (shutdown_triggered.load(Ordering::SeqCst)) {
                     break;
                 }
@@ -165,6 +168,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 //     file.flush().expect("TODO: panic message");
                 //     break;
                 // }
+            } else {
+                //todo: move inside the experiment impl
+                println!("Experiment failed to start");
+                experiment.kill_processes()?;
             }
         }
         if (shutdown_triggered.load(Ordering::SeqCst)) {
