@@ -39,7 +39,8 @@ pub mod analyze;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
-const PORT_RANGE: std::ops::Range<u16> = 10_000..20_000;
+//const PORT_RANGE: std::ops::Range<u16> = 10_000..20_000;
+const PORT_RANGE: std::ops::Range<u16> = 7000..8000;
 
 
 fn get_available_port(mut range: Range<u16>) -> Option<u16> {
@@ -296,15 +297,19 @@ impl ExperimentSetup {
         self.kill_processes();
         self.fixed_worker_processes = vec![];
         self.mobile_worker_processes = vec![];
-        self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered))?;
 
-        wait_for_topology(Some(1), Arc::clone(&shutdown_triggered))?;
+        //let rest_port = get_available_port(PORT_RANGE).ok_or("Could not find available port")?;
+        let rest_port = 8081;
+
+        self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port)?;
+
+        wait_for_topology(Some(1), Arc::clone(&shutdown_triggered), rest_port)?;
 
         self.start_fixed_workers(&executable_paths.worker_path, Arc::clone(&shutdown_triggered))?;
 
-        wait_for_topology(Some(self.fixed_worker_processes.len() + 1), Arc::clone(&shutdown_triggered))?;
+        wait_for_topology(Some(self.fixed_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
-        self.add_edges()?;
+        self.add_edges(rest_port)?;
 
         //wait for user to press key to start mobile workers
         // println!("press any key to start mobile workers");
@@ -334,7 +339,7 @@ impl ExperimentSetup {
 
     }
 
-    fn add_edges(&self) -> Result<(), Box<dyn Error>> {
+    fn add_edges(&self, rest_port: u16) -> Result<(), Box<dyn Error>> {
         let client = reqwest::blocking::Client::new();
         for (parent_id, child_id) in &self.edges {
             if parent_id == &1 {
@@ -344,7 +349,7 @@ impl ExperimentSetup {
                 parent_id: *parent_id,
                 child_id: *child_id,
             };
-            let result = client.post("http://127.0.0.1:8081/v1/nes/topology/addAsChild")
+            let result = client.post(format!("http://127.0.0.1:{}/v1/nes/topology/addAsChild", &rest_port.to_string()))
                 .json(&link_request).send()?;
             //println!("{}", result.text().unwrap());
             let reply: AddEdgeReply = result.json()?;
@@ -418,12 +423,13 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+    fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>, rest_port: u16) -> Result<(), Box<dyn Error>> {
         self.coordinator_process = Some(Command::new(&coordinator_path)
             .arg("--restServerCorsAllowedOrigin=*")
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
-            .arg("--logLevel=LOG_ERROR")
-            // .arg("--logLevel=LOG_DEBUG")
+            //.arg(format!("--restPort={}", &rest_port.to_string()))
+            // .arg("--logLevel=LOG_ERROR")
+            .arg("--logLevel=LOG_DEBUG")
             .spawn()?);
 
         //wait until coordinator is online
@@ -1018,12 +1024,13 @@ fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Res
     Err(String::from("Coordinator did not connect").into())
 }
 
-fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<usize, Box<dyn Error>> {
+fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc<AtomicBool>, restPort: u16) -> std::result::Result<usize, Box<dyn Error>> {
+    println!("waiting for topology, rest port {}", &restPort.to_string());
     for i in 0..10 {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
         }
-        if let Ok(mut reply) = reqwest::blocking::get("http://127.0.0.1:8081/v1/nes/topology") {
+        if let Ok(mut reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
             let size = reply.json::<ActualTopology>().unwrap().nodes.len();
             println!("topology contains {} nodes", size);
             if let Some(expected) = expected_node_count {

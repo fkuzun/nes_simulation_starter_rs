@@ -156,7 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .open(&output_directory.join("error.csv"))
                         .unwrap();
                     //let error_string = format!("Aborted experiment in attempt {}", attempt);
-                    let error_string = format!("{},{},{},{}", output_directory.to_str().ok_or("Could not convert output directory to string")?, attempt, line_count.load(SeqCst), desired_line_count);
+                    let error_string = format!("{},{},{},{}\n", experiment.generated_folder.to_str().ok_or("Could not convert output directory to string")?, attempt, line_count.load(SeqCst), desired_line_count);
                     println!("Writing error string: {}", error_string);
                     error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
                 }
