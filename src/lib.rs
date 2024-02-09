@@ -434,8 +434,8 @@ impl ExperimentSetup {
             .arg("--restServerCorsAllowedOrigin=*")
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
             //.arg(format!("--restPort={}", &rest_port.to_string()))
-            // .arg("--logLevel=LOG_ERROR")
-            .arg("--logLevel=LOG_DEBUG")
+            .arg("--logLevel=LOG_ERROR")
+            // .arg("--logLevel=LOG_DEBUG")
             .spawn()?);
 
         //wait until coordinator is online
@@ -963,7 +963,7 @@ enum WorkerConfigType {
 pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<File>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
     //let mut reader = tokio::io::BufReader::new(stream);
-    let mut line = String::new();
+    //let mut line = String::new();
     let mut buf = vec![];
 
     // Iterate over the lines received from the client and write them to the CSV file
@@ -994,19 +994,29 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
-    let mut reader = tokio::io::BufReader::new(&*buf);
+    //let mut reader = tokio::io::BufReader::new(&*buf);
 
-    while let Ok(bytes_read) = reader.read_line(&mut line).await {
-        if (shutdown_triggered.load(SeqCst)) {
-            break;
-        }
+    println!("Received eof, counting tuples an writing file");
 
-        if bytes_read == 0 {
-            break; // EOF, so end the loop
+    //count all line breaks in the received buffer
+    for &byte in &buf {
+        if byte == 10u8 {
+            line_count.fetch_add(1, Ordering::SeqCst);
         }
-        line_count.fetch_add(1, Ordering::SeqCst);
     }
-    write!(file, "{}", line)?;
+
+    // while let Ok(bytes_read) = reader.read_line(&mut line).await {
+    //     if (shutdown_triggered.load(SeqCst)) {
+    //         break;
+    //     }
+    //
+    //     if bytes_read == 0 {
+    //         break; // EOF, so end the loop
+    //     }
+    //     line_count.fetch_add(1, Ordering::SeqCst);
+    // }
+    // write!(file, "{}", line)?;
+    file.write_all(&buf)?;
     println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);
 
     Ok(())
