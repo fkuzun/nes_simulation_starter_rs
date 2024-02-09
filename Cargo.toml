@@ -35,6 +35,10 @@ path = "src/get_random_number_range.rs"
 name = "timestamp_reconnect_list"
 path = "src/timestamp_reconnect_list.rs"
 
+[[bin]]
+name = "retry_experiments"
+path = "src/retry_experiments.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

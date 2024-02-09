@@ -33,6 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
     let output_directory = PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments");
     let abort_experiment_info_directory = PathBuf::from("/home/x/uni/ba/experiments");
+    let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
     //let output_directory = PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments");
 
 
@@ -42,11 +43,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         relative_coordinator_path,
         input_config_path,
         output_directory: output_directory.clone(),
+        run_for_retrial_path,
     };
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
     let worker_path = &nes_executable_paths.worker_path;
     //let mut experiment = simulation_config.generate_experiment_configs().expect("Could not create experiment");
+
+    // let mut experiments = if simulation_config.run_for_retrial_path.is_some() {
+    //     simulation_config.generate_retrials().expect("Could not create experiment")
+    // } else {
+    //     simulation_config.generate_experiment_configs().expect("Could not create experiment")
+    // };
     let mut experiments = simulation_config.generate_experiment_configs().expect("Could not create experiment");
 
     let shutdown_triggered = Arc::new(AtomicBool::new(false));
