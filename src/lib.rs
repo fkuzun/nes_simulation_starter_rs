@@ -1147,9 +1147,9 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
                     return Ok(size);
                 }
                 println!("number of nodes not reached");
-                std::thread::sleep(time::Duration::from_secs(1));
             }
         }
+        std::thread::sleep(time::Duration::from_secs(1));
     }
     Err(String::from("Expected node count not reached in topology").into())
 }
