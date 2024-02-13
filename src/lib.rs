@@ -474,7 +474,7 @@ impl ExperimentSetup {
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
-                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap()))
+                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
                 // .arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
 
@@ -490,7 +490,7 @@ impl ExperimentSetup {
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
-                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap()))
+                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
                 .spawn()?;
             self.fixed_worker_processes.push(process);
         };
@@ -502,7 +502,7 @@ impl ExperimentSetup {
             .arg("--restServerCorsAllowedOrigin=*")
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
             //.arg(format!("--restPort={}", &rest_port.to_string()))
-            .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap()))
+            .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
             // .arg("--logLevel=LOG_DEBUG")
             .spawn()?);
 
@@ -1126,10 +1126,10 @@ fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Res
                 println!("Coordinator has connected");
                 return Ok(());
             }
-            let input: String = text_io::read!("{}\n");
-            std::thread::sleep(time::Duration::from_secs(1));
         }
+        sleep(Duration::from_secs(1));
     }
+    println!("Coordinator did not connect");
     Err(String::from("Coordinator did not connect").into())
 }
 
