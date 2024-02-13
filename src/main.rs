@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::fmt::format;
 use std::fs::{File, OpenOptions};
@@ -19,26 +20,40 @@ use simulation_runner_lib::analyze::create_notebook;
 
 fn main() -> Result<(), Box<dyn Error>> {
     //todo: read this from file
-    let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
+
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 5 || args.len() > 7 {
+        eprintln!("Usage: {} <nes directory> <experiment input config path> <output directory> <tcp input server executable> <interval> <log level (optional)>, <experiment path for retrial (optional)>", args[0]);
+        std::process::exit(1);
+    }
+
+    let nes_root_dir = PathBuf::from(&args[1]);
+    let input_config_path = PathBuf::from(&args[2]);
+    let output_directory = PathBuf::from(&args[3]);
+    let input_server_path = PathBuf::from(&args[4]);
+    let log_level: LogLevel = if args.len() == 6 {
+        println!("Log level: {}", &args[5]);
+        serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[5])).unwrap_or_else(|e| {
+            eprintln!("Could not parse log level: {}", e);
+            LogLevel::LOG_ERROR
+        })
+    } else {
+        LogLevel::LOG_ERROR
+    };
+    let run_for_retrial_path = if args.len() == 7 {
+        Some(PathBuf::from(&args[5]))
+    } else {
+        None
+    };
+
+    // let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/single_source_half_second_reconnects_no_reconfig.toml");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconf.toml");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_no_reconf.toml");
-    let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_static_multiple_fixed_source_iterate.toml");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_fied_source_reconf.toml");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_reconf.toml");
-    //let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/input_data_config.toml");
-    //let output_directory = PathBuf::from("/home/x/uni/ba/experiments");
-    let output_directory = PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments");
-    let abort_experiment_info_directory = PathBuf::from("/home/x/uni/ba/experiments");
-    //let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
-   // let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-012024-02-09_20-52-37"));
+    // let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml");
+    // let output_directory = PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments");
 
     //check if retrial is complete
-    let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/merged/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
-    //let output_directory = PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments");
+    //let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/merged/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
 
 
     let simulation_config = SimulationConfig {
@@ -84,8 +99,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("{}", toml::to_string(&experiment.input_config).unwrap());
         for attempt in 1..=1 {
             //start source input server
-            let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
-                //todo: do not hard code
+            //let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
+            let mut source_input_server_process = Command::new(&input_server_path)
                 .arg("127.0.0.1")
                 .arg(experiment.input_config.parameters.source_input_server_port.to_string())
                 .arg(experiment.num_buffers.to_string())
@@ -96,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let experiment_start = SystemTime::now();
             let now: DateTime<Local> = Local::now();
             println!("{}: Starting attempt {}", now, attempt);
-            if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered)) {
+            if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
                 //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                 let desired_line_count = experiment.total_number_of_tuples_to_ingest;
                 // Bind the TCP listener to the specified address and port
@@ -183,7 +198,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
                 tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
                 //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
-                create_notebook(&PathBuf::from(&file_path), &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
+                //create_notebook(&PathBuf::from(&file_path), &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
                 if (shutdown_triggered.load(Ordering::SeqCst)) {
                     break;
                 }

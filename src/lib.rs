@@ -369,7 +369,7 @@ pub struct ExperimentSetup {
 }
 
 impl ExperimentSetup {
-    pub fn start(&mut self, executable_paths: &NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+    pub fn start(&mut self, executable_paths: &NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         self.kill_processes();
         self.fixed_worker_processes = vec![];
         self.mobile_worker_processes = vec![];
@@ -377,11 +377,11 @@ impl ExperimentSetup {
         //let rest_port = get_available_port(PORT_RANGE).ok_or("Could not find available port")?;
         let rest_port = 8081;
 
-        self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port)?;
+        self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port, &log_level)?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered), rest_port)?;
 
-        self.start_fixed_workers(&executable_paths.worker_path, Arc::clone(&shutdown_triggered))?;
+        self.start_fixed_workers(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
 
         wait_for_topology(Some(self.fixed_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
@@ -392,7 +392,7 @@ impl ExperimentSetup {
         // let input: String = text_io::read!("{}\n");
 
 
-        self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered))?;
+        self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
 
         sleep(Duration::from_secs(2));
 
@@ -467,14 +467,14 @@ impl ExperimentSetup {
     }
 
 
-    fn start_fixed_workers(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+    fn start_fixed_workers(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         for path in &self.fixed_config_paths {
             if shutdown_triggered.load(Ordering::SeqCst) {
                 return Err(String::from("Shutdown triggered").into());
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
-                .arg("--logLevel=LOG_ERROR")
+                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap()))
                 // .arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
 
@@ -483,26 +483,26 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    fn start_mobile(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+    fn start_mobile(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         for path in &self.mobile_config_paths {
             if shutdown_triggered.load(Ordering::SeqCst) {
                 return Err(String::from("Shutdown triggered").into());
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
-                .arg("--logLevel=LOG_ERROR")
+                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap()))
                 .spawn()?;
             self.fixed_worker_processes.push(process);
         };
         Ok(())
     }
 
-    fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>, rest_port: u16) -> Result<(), Box<dyn Error>> {
+    fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>, rest_port: u16, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         self.coordinator_process = Some(Command::new(&coordinator_path)
             .arg("--restServerCorsAllowedOrigin=*")
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
             //.arg(format!("--restPort={}", &rest_port.to_string()))
-            .arg("--logLevel=LOG_ERROR")
+            .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap()))
             // .arg("--logLevel=LOG_DEBUG")
             .spawn()?);
 
@@ -951,8 +951,8 @@ struct CoordinatorConfiguration {
     logLevel: LogLevel,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-enum LogLevel {
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum LogLevel {
     LOG_DEBUG,
     LOG_INFO,
     LOG_WARN,
@@ -1200,4 +1200,15 @@ fn create_input_source_data(
     println!("Input file created: {}", file_path.display());
 
     Ok(file_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserializing_log_level() {
+        let log_level: LogLevel = serde_json::from_str("\"LOG_DEBUG\"").unwrap();
+        assert_eq!(log_level, LogLevel::LOG_DEBUG);
+    }
 }
