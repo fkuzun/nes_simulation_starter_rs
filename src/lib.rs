@@ -64,6 +64,7 @@ fn port_is_available(port: u16) -> bool {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MultiSimulationInputConfig {
     pub enable_query_reconfiguration: Vec<bool>,
+    pub enable_proactive_deployment: Vec<bool>,
     pub tuples_per_buffer: Vec<usize>,
     pub speedup_factor: Vec<f64>,
     #[serde_as(as = "Vec<DurationMilliSeconds<u64>>")]
@@ -83,6 +84,10 @@ impl MultiSimulationInputConfig {
 
     pub fn get_tuples_per_buffer_short_name(&self) -> String {
         String::from("tuplesPerBuffer")
+    }
+
+    pub fn get_proactive_short_name(&self) -> String {
+        String::from("proactive")
     }
 
     pub fn get_gathering_interval_short_name(&self) -> String {
@@ -109,31 +114,42 @@ impl MultiSimulationInputConfig {
         let mut configs = vec![];
         //let mut source_input_server_port = START_OF_SOURCE_INPUT_SERVER_PORT_RANGE;
         for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
-            for &tuples_per_buffer in &self.tuples_per_buffer {
-                for &gathering_interval in &self.gathering_interval {
-                    for &speedup_factor in &self.speedup_factor {
-                        let config = InputConfig {
-                            parameters: Parameters {
-                                enable_query_reconfiguration,
-                                speedup_factor,
-                                //source_input_server_port,
-                                ..self.default_config.parameters.clone()
-                            },
-                            default_source_input: DefaultSourceInput {
-                                tuples_per_buffer,
-                                gathering_interval,
-                                ..self.default_config.default_source_input.clone()
-                            },
-                            ..self.default_config.clone()
-                        };
+            for &enable_proactive_deployment in &self.enable_proactive_deployment {
+                if !enable_query_reconfiguration && enable_proactive_deployment {
+                    println!("skipping config with reconfiguration disabled and proactive deployment enabled");
+                    continue;
+                }
+                for &tuples_per_buffer in &self.tuples_per_buffer {
+                    for &gathering_interval in &self.gathering_interval {
+                        for &speedup_factor in &self.speedup_factor {
+                            let config = InputConfig {
+                                parameters: Parameters {
+                                    enable_query_reconfiguration,
+                                    enable_proactive_deployment,
+                                    speedup_factor,
+                                    //source_input_server_port,
+                                    ..self.default_config.parameters.clone()
+                                },
+                                default_source_input: DefaultSourceInput {
+                                    tuples_per_buffer,
+                                    gathering_interval,
+                                    ..self.default_config.default_source_input.clone()
+                                },
+                                ..self.default_config.clone()
+                            };
 
-                        //source_input_server_port += 1;
-                        let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
-                        short_name.push_str(&self.get_short_name_to_short_name_separator());
-                        short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
-                        short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
-                        short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
-                        configs.push((short_name, config));
+                            //source_input_server_port += 1;
+                            let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
+                            short_name.push_str(&self.get_short_name_to_short_name_separator());
+                            short_name.push_str(&self.get_short_name_with_value(&self.get_proactive_short_name(), &enable_proactive_deployment.to_string()));
+                            short_name.push_str(&self.get_short_name_to_short_name_separator());
+                            short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
+                            short_name.push_str(&self.get_short_name_to_short_name_separator());
+                            short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
+                            short_name.push_str(&self.get_short_name_to_short_name_separator());
+                            short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
+                            configs.push((short_name, config));
+                        }
                     }
                 }
             }
@@ -205,23 +221,23 @@ impl SimulationConfig {
                     let entry = entry?;
                     let path = entry.path();
                     if path.is_file() {
-                         if let Some(name) = &path.file_name() {
-                             if name.to_str().unwrap().contains("tuple_count") {
-                                 // let mut setup = self.generate_experiment_configs()?;
-                                 // let mut setup = setup.pop().unwrap();
-                                 // setup.experiment_output_path = path;
-                                 // setups.push(setup);
-                                 let content = fs::read_to_string(&path)?;
-                                 println!("{}", content);
-                                 let mut parts = content.trim().split(',');
+                        if let Some(name) = &path.file_name() {
+                            if name.to_str().unwrap().contains("tuple_count") {
+                                // let mut setup = self.generate_experiment_configs()?;
+                                // let mut setup = setup.pop().unwrap();
+                                // setup.experiment_output_path = path;
+                                // setups.push(setup);
+                                let content = fs::read_to_string(&path)?;
+                                println!("{}", content);
+                                let mut parts = content.trim().split(',');
 
-                                 let a: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
-                                 let b: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
-                                 let c: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
-                                 tuple_count_output = Some((a, b, c));
-                                 break;
-                             }
-                         }
+                                let a: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
+                                let b: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
+                                let c: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
+                                tuple_count_output = Some((a, b, c));
+                                break;
+                            }
+                        }
                     }
                 }
                 if let Some((_, 0, _)) | None = tuple_count_output {
@@ -251,7 +267,6 @@ impl SimulationConfig {
     }
 
     pub fn generate_experiment_configs(&self) -> Result<Vec<ExperimentSetup>, Box<dyn Error>> {
-
         let (generated_main_folder, input_config_list) = if self.run_for_retrial_path.is_some() {
             let folder_prefix = self.run_for_retrial_path.as_ref().unwrap().file_name().unwrap().to_str().unwrap();
             let generated_main_folder = create_folder_with_timestamp(self.output_directory.clone(), folder_prefix);
@@ -308,6 +323,7 @@ impl NesExecutablePaths {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Parameters {
     pub enable_query_reconfiguration: bool,
+    pub enable_proactive_deployment: bool,
     pub speedup_factor: f64,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub runtime: Duration,
@@ -533,6 +549,7 @@ impl InputConfig {
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
             enableQueryReconfiguration: self.parameters.enable_query_reconfiguration,
+            enableProactiveDeployment: self.parameters.enable_proactive_deployment,
             logicalSources: vec![
                 LogicalSource {
                     logicalSourceName: "values".to_string(),
@@ -947,6 +964,7 @@ struct LogicalSource {
 #[derive(Debug, Serialize, Deserialize)]
 struct CoordinatorConfiguration {
     enableQueryReconfiguration: bool,
+    enableProactiveDeployment: bool,
     logicalSources: Vec<LogicalSource>,
     logLevel: LogLevel,
 }
