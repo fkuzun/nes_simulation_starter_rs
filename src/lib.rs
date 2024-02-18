@@ -333,6 +333,7 @@ pub struct Parameters {
     pub source_input_server_port: u16,
     pub query_string: String,
     pub place_default_source_on_fixed_node_ids: Vec<u64>,
+    pub num_worker_threads: u64,
 }
 
 
@@ -606,7 +607,8 @@ impl InputConfig {
                             filePath: self.parameters.source_input_server_port.to_string(),
                             skipHeader: false,
                             //todo: fix this
-                            sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
+                            //sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
+                            sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
                             //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
                             numberOfTuplesToProducePerBuffer,
                             //numberOfBuffersToProduce: num_buffers.try_into()?,
@@ -626,6 +628,7 @@ impl InputConfig {
                 workerId: id,
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
+                numWorkerThreads: self.parameters.num_worker_threads,
             };
             let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -739,6 +742,7 @@ impl InputConfig {
                     }
                 ],
                 logLevel: LogLevel::LOG_ERROR,
+                numWorkerThreads: self.parameters.num_worker_threads,
             };
             let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", id));
             worker_config.write_to_file(&yaml_path)?;
@@ -911,6 +915,7 @@ struct MobileWorkerConfig {
     physicalSources: Vec<PhysicalSource>,
     fieldNodeLocationCoordinates: String,
     logLevel: LogLevel,
+    numWorkerThreads: u64
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -924,6 +929,7 @@ struct FixedWorkerConfig {
     #[serde(skip_serializing_if = "std::vec::Vec::is_empty")]
     physicalSources: Vec<PhysicalSource>,
     logLevel: LogLevel,
+    numWorkerThreads: u64
     //fieldNodeLocationCoordinates: (f64, f64),
 }
 

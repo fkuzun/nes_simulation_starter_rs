@@ -20,22 +20,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
 
     let mut rng = rand::thread_rng();
-    let fixed_nodes_hosting_sources = if args.len() == 7 {
-        let source_count = args[6].parse::<u64>().expect("Invalid duration");
-        let mut numbers: Vec<u64> = vec![];
-        for _i in 0..10 {
-            let mut number = rng.gen_range(min_id..max_id);
-            while numbers.contains(&number) {
-                number = rng.gen_range(min_id..max_id);
-            }
-            numbers.push(number);
-        }
-        println!("{:?}", numbers);
-        numbers
-    } else {
-        vec![]
-    };
-    // let fixed_nodes_hosting_sources = [36, 72, 19, 40, 34, 68, 55, 37, 35, 22];
+    // let fixed_nodes_hosting_sources = if args.len() == 7 {
+    //     let source_count = args[6].parse::<u64>().expect("Invalid duration");
+    //     let mut numbers: Vec<u64> = vec![];
+    //     for _i in 0..10 {
+    //         let mut number = rng.gen_range(min_id..max_id);
+    //         while numbers.contains(&number) {
+    //             number = rng.gen_range(min_id..max_id);
+    //         }
+    //         numbers.push(number);
+    //     }
+    //     println!("{:?}", numbers);
+    //     numbers
+    // } else {
+    //     vec![]
+    // };
+    let fixed_nodes_hosting_sources =  [7, 9, 11, 13, 15, 17, 19, 21, 23, 25];
 
     let mut timestamp = Duration::new(0, 0);
     let mut csv_writer = csv::WriterBuilder::new()

@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 5 || args.len() > 7 {
-        eprintln!("Usage: {} <nes directory> <experiment input config path> <output directory> <tcp input server executable> <interval> <log level (optional)>, <experiment path for retrial (optional)>", args[0]);
+        eprintln!("Usage: {} <nes directory> <experiment input config path> <output directory> <tcp input server executable> <log level (optional)>, <experiment path for retrial (optional)>", args[0]);
         std::process::exit(1);
     }
 
@@ -108,7 +108,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
                 .spawn()?;
 
-            std::thread::sleep(Duration::from_secs(5));
+            //std::thread::sleep(Duration::from_secs(5));
 
             let experiment_start = SystemTime::now();
             let now: DateTime<Local> = Local::now();
@@ -126,6 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut file = File::create(&file_path).unwrap();
                 let mut file = Arc::new(file);
                 let query_string = experiment.input_config.parameters.query_string.clone();
+                std::thread::sleep(Duration::from_secs(5));
 
                 // Use the runtime
                 rt.block_on(async {
