@@ -1091,11 +1091,24 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
     println!("Timeout, counting tuples an writing file");
 
     //count all line breaks in the received buffer
+    let mut current_valid_byte_count = 0;
+    let mut total_valid_byte_count = 0;
     for &byte in &buf {
+        current_valid_byte_count += 1;
         if byte == 10u8 {
             line_count.fetch_add(1, Ordering::SeqCst);
+            total_valid_byte_count += current_valid_byte_count;
+            current_valid_byte_count = 0;
         }
     }
+
+    // sanity check
+    for &byte in &buf[total_valid_byte_count..] {
+        if byte == 10u8 {
+            panic!("Sanity check failed, found line break after valid byte count");
+        }
+    }
+
 
     // while let Ok(bytes_read) = reader.read_line(&mut line).await {
     //     if (shutdown_triggered.load(SeqCst)) {
@@ -1108,7 +1121,7 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
     //     line_count.fetch_add(1, Ordering::SeqCst);
     // }
     // write!(file, "{}", line)?;
-    file.write_all(&buf)?;
+    file.write_all(&buf[0..total_valid_byte_count])?;
     println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);
 
     Ok(())
