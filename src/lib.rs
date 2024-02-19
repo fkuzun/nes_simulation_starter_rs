@@ -734,7 +734,7 @@ impl InputConfig {
                             filePath: self.parameters.source_input_server_port.to_string(),
                             skipHeader: false,
                             //todo: fix this
-                            sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
+                            sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
                             //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
                             numberOfTuplesToProducePerBuffer,
                             //numberOfBuffersToProduce: num_buffers.try_into()?,
