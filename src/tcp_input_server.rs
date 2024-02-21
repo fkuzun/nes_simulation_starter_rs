@@ -84,6 +84,8 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
         std::thread::sleep(gathering_interval);
     }
 
+    std::thread::sleep(std::time::Duration::from_secs(10));
+
     Ok(())
 }
 
