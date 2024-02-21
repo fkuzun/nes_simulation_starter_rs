@@ -624,7 +624,8 @@ impl InputConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
                 //numberOfSlots: 6000, //todo: set to 1 to stress test the plan creation
-                numberOfSlots: number_of_slots,
+                //numberOfSlots: number_of_slots,
+                numberOfSlots: *topology.slots.get(input_id).unwrap(),
                 nodeSpatialType: "FIXED_LOCATION".to_string(),
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: *input_id,
@@ -840,6 +841,7 @@ pub struct PrecalculatedReconnect {
 pub struct FixedTopology {
     //todo: check if we can just make that a tuple
     pub nodes: HashMap<u64, Vec<f64>>,
+    pub slots: HashMap<u64, u16>,
     pub children: HashMap<u64, Vec<u64>>,
 }
 
