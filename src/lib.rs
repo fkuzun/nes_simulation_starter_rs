@@ -588,12 +588,14 @@ impl InputConfig {
         };
 
         let mut next_free_port = 5000;
-        let mut id = 2;
-        let mut input_id_to_system_id_map = HashMap::new();
         let mut fixed_config_paths = vec![];
         let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
         let mut total_number_of_tuples_to_ingest = 0;
+        let mut max_fixed_id = 0;
         for (input_id, location) in &topology.nodes {
+            if input_id > &max_fixed_id {
+                max_fixed_id = *input_id;
+            }
             let (physical_sources, number_of_slots) = if self.parameters.place_default_source_on_fixed_node_ids.contains(input_id) {
                 let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
                 total_number_of_tuples_to_ingest += num_tuples;
@@ -625,16 +627,14 @@ impl InputConfig {
                 numberOfSlots: number_of_slots,
                 nodeSpatialType: "FIXED_LOCATION".to_string(),
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
-                workerId: id,
+                workerId: *input_id,
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
             };
-            let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", id));
+            let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", input_id));
             worker_config.write_to_file(&yaml_path)?;
             fixed_config_paths.push(yaml_path);
-            input_id_to_system_id_map.insert(input_id, id);
-            id += 1;
             next_free_port += 2;
         }
 
@@ -642,6 +642,7 @@ impl InputConfig {
         let mut mobile_config_paths = vec![];
         let mobility_input_config = MobilityInputConfigList::read_input_from_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))?;
         let mut generated_mobility_configs = vec![];
+        let mut input_id = max_fixed_id + 1;
         for worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
             //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
             //todo: can we remove the cretion of csv source?
@@ -720,7 +721,7 @@ impl InputConfig {
                 fieldNodeLocationCoordinates: "0,0".into(), //setting this only in case we are using precalculated reconnects
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
-                workerId: id,
+                workerId: input_id,
                 numberOfSlots: 1,
                 nodeSpatialType: "MOBILE_NODE".to_owned(),
                 mobility: generated_mobility_config,
@@ -744,10 +745,10 @@ impl InputConfig {
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
             };
-            let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", id));
+            let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", input_id));
             worker_config.write_to_file(&yaml_path)?;
             mobile_config_paths.push(yaml_path);
-            id += 1;
+            input_id += 1;
             next_free_port += 2;
             let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
             total_number_of_tuples_to_ingest += num_tuples;
@@ -761,7 +762,7 @@ impl InputConfig {
         let mut edges = vec![];
         for (parent, children) in topology.children {
             for child in children {
-                edges.push((*input_id_to_system_id_map.get(&parent).ok_or("Could not find parent id")?, *input_id_to_system_id_map.get(&child).ok_or("Could not find child id")?))
+                edges.push((parent, child))
             }
         }
 
