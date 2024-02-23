@@ -397,10 +397,12 @@ impl ExperimentSetup {
         self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port, &log_level)?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered), rest_port)?;
+        // wait_for_topology(Some(2), Arc::clone(&shutdown_triggered), rest_port)?;
 
         self.start_fixed_workers(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
 
         wait_for_topology(Some(self.fixed_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
+        //wait_for_topology(Some(self.fixed_worker_processes.len() + 1 + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
         self.add_edges(rest_port)?;
 
@@ -492,7 +494,7 @@ impl ExperimentSetup {
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
                 .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
-                // .arg("--logLevel=LOG_DEBUG")
+                //.arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
 
             self.fixed_worker_processes.push(process);
@@ -508,6 +510,7 @@ impl ExperimentSetup {
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
                 .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
+                //.arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
             self.fixed_worker_processes.push(process);
         };
@@ -520,7 +523,7 @@ impl ExperimentSetup {
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
             //.arg(format!("--restPort={}", &rest_port.to_string()))
             .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
-            // .arg("--logLevel=LOG_DEBUG")
+            //.arg("--logLevel=LOG_DEBUG")
             .spawn()?);
 
         //wait until coordinator is online
@@ -635,8 +638,11 @@ impl InputConfig {
             };
             let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", input_id));
             worker_config.write_to_file(&yaml_path)?;
-            fixed_config_paths.push(yaml_path);
             next_free_port += 2;
+            // if (input_id == &2) {
+            //     continue
+            // }
+            fixed_config_paths.push(yaml_path);
         }
 
 
@@ -894,6 +900,38 @@ struct PhysicalSourceConfiguration {
     numberOfTuplesToProducePerBuffer: u64,
     //numberOfBuffersToProduce: u64,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+enum SocketDomain {
+    AF_INET,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum SocketType {
+    SOCKET_STREAM
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum SourceInputFormat {
+    CSV
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum DecidedmMessageSize {
+    TUPLE_SEPARATOR
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct TCPSourceConfiguration {
+    socketDomain: SocketDomain,
+    socketType: SocketType,
+    port: u16,
+    host: String,
+    format: SourceInputFormat,
+    decideMessageSize: DecidedmMessageSize,
+    tupleSeparator: char,
+    flushIntervalMS: u64,
+}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PhysicalSource {
