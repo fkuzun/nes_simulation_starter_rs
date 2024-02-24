@@ -753,7 +753,7 @@ impl InputConfig {
                         },
                     }
                 ],
-                logLevel: LogLevel::LOG_ERROR
+                logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
             };
             let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", input_id));
