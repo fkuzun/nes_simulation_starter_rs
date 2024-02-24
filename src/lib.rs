@@ -574,6 +574,10 @@ impl InputConfig {
                             name: "processing_timestamp".to_string(),
                             Type: UINT64,
                         },
+                        LogicalSourceField {
+                            name: "output_timestamp".to_string(),
+                            Type: UINT64,
+                        },
                     ],
                 }
             ],
@@ -749,7 +753,7 @@ impl InputConfig {
                         },
                     }
                 ],
-                logLevel: LogLevel::LOG_ERROR,
+                logLevel: LogLevel::LOG_ERROR
                 numWorkerThreads: self.parameters.num_worker_threads,
             };
             let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", input_id));
@@ -1132,40 +1136,49 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
     println!("Timeout, counting tuples an writing file");
 
     //count all line breaks in the received buffer
-    let mut current_valid_byte_count = 0;
-    let mut total_valid_byte_count = 0;
-    for &byte in &buf {
-        current_valid_byte_count += 1;
-        if byte == 10u8 {
-            line_count.fetch_add(1, Ordering::SeqCst);
-            total_valid_byte_count += current_valid_byte_count;
-            current_valid_byte_count = 0;
-        }
-    }
-
-    // sanity check
-    for &byte in &buf[total_valid_byte_count..] {
-        if byte == 10u8 {
-            panic!("Sanity check failed, found line break after valid byte count");
-        }
-    }
-
-
-    // while let Ok(bytes_read) = reader.read_line(&mut line).await {
-    //     if (shutdown_triggered.load(SeqCst)) {
-    //         break;
+    // let mut current_valid_byte_count = 0;
+    // let mut total_valid_byte_count = 0;
+    // for &byte in &buf {
+    //     current_valid_byte_count += 1;
+    //     if byte == 10u8 {
+    //         line_count.fetch_add(1, Ordering::SeqCst);
+    //         total_valid_byte_count += current_valid_byte_count;
+    //         current_valid_byte_count = 0;
     //     }
-    //
-    //     if bytes_read == 0 {
-    //         break; // EOF, so end the loop
-    //     }
-    //     line_count.fetch_add(1, Ordering::SeqCst);
     // }
-    // write!(file, "{}", line)?;
-    file.write_all(&buf[0..total_valid_byte_count])?;
+    // 
+    // // sanity check
+    // for &byte in &buf[total_valid_byte_count..] {
+    //     if byte == 10u8 {
+    //         panic!("Sanity check failed, found line break after valid byte count");
+    //     }
+    // }
+    //file.write_all(&buf[0..total_valid_byte_count])?;
+    
+    let tuple_size = 40;
+    let valid_bytes = buf.len() - (buf.len() % tuple_size);
+    for i in (0..valid_bytes).step_by(tuple_size) {
+        line_count.fetch_add(1, Ordering::SeqCst);
+        let tuple = &buf[i..i + tuple_size];
+        let tuple_string = get_tuple_string(tuple);
+        file.write_all(tuple_string.as_bytes())?;
+        file.write_all(b"\n")?;
+    }
+
+
     println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);
 
     Ok(())
+}
+
+
+fn get_tuple_string(binary_tuple: &[u8]) -> String {
+    let id = u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]);
+    let sequence_number = u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]);
+    let event_timestamp = u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]);
+    let ingestion_timestamp = u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]);
+    let output_timestamp = u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]);
+    format!("{},{},{},{},{}", id, sequence_number, event_timestamp, ingestion_timestamp, output_timestamp)
 }
 
 fn count_lines_in_file(file_path: &Path) -> io::Result<usize> {
