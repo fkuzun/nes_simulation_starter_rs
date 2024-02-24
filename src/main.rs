@@ -173,7 +173,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             //check timeout
                             let current_time = SystemTime::now();
                             if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                                if elapsed_time > experiment_duration + Duration::from_secs(30) {
+                                if elapsed_time > experiment_duration + experiment.input_config.parameters.cooldown_time * 2 {
                                     break;
                                 }
                             }

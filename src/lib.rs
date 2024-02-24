@@ -1108,7 +1108,7 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
         }
         let current_time = SystemTime::now();
         if let Ok(elapsed_time) = current_time.duration_since(start_time) {
-            if elapsed_time > experiment_duration + Duration::from_secs(30) {
+            if elapsed_time > experiment_duration {
                 break;
             }
         }
