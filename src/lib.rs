@@ -675,13 +675,21 @@ impl InputConfig {
             let mut csv_writer = csv::WriterBuilder::new()
                 .has_headers(false)
                 .from_path(&output_trajectory_path).unwrap();
+            
 
             for mut point in waypoints {
                 point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
+                //add delay of 15 seconds before starting reconnects
+                if !point.offset.is_zero() {
+                    point.offset = point.offset.add(Duration::from_secs(25));
+                }
+                
                 if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
                     println!("skip waypoint");
                     break;
                 }
+                
+                
                 csv_writer.serialize(point).unwrap();
             }
 
@@ -704,6 +712,11 @@ impl InputConfig {
 
                     for mut reconnect in reconnects {
                         reconnect.offset = reconnect.offset.mul_f64(self.parameters.speedup_factor);
+                        //add delay of 15 seconds before starting reconnects
+                        //todo: make this a config parameter
+                        if !reconnect.offset.is_zero() {
+                            reconnect.offset = reconnect.offset.add(Duration::from_secs(25));
+                        }
                         if reconnect.offset > self.parameters.runtime.sub(self.parameters.cooldown_time) {
                             println!("skip reconnect");
                             break;

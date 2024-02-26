@@ -4,6 +4,7 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::env;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use tokio::time::Instant;
 
 fn main() -> std::io::Result<()> {
     // Parse environment variables
@@ -26,6 +27,8 @@ fn main() -> std::io::Result<()> {
             std::process::exit(1);
         }
     };
+    let deadline = Instant::now() + std::time::Duration::from_secs(20);
+     
     println!("Server listening on port {}...", port);
 
     let gather_interval = std::time::Duration::from_millis(gathering_interval);
@@ -37,7 +40,7 @@ fn main() -> std::io::Result<()> {
             Ok(mut stream) => {
                 // Spawn a new thread to handle each client connection
                 thread::spawn(move || {
-                    if let Err(err) = handle_client(stream, id_count, num_buffers, buffer_size, gather_interval) {
+                    if let Err(err) = handle_client(stream, id_count, num_buffers, buffer_size, gather_interval, deadline) {
                         eprintln!("Error handling client: {}", err);
                     }
                 });
@@ -52,10 +55,16 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration) -> std::io::Result<()> {
-
-    let (sender, receiver): (Sender<Option<Vec<u8>>>, Receiver<Option<Vec<u8>>>) = channel();
+fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration, deadline: Instant) -> std::io::Result<()> {
     println!("Starting tcp writer thread");
+    //sleep if deadline is not reached
+    if let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        println!("Deadline not reached, sleeping for {:?}", remaining);
+        std::thread::sleep(remaining);
+    }
+    
+    println!("Deadline reached, starting to write to socket"); 
+    let (sender, receiver): (Sender<Option<Vec<u8>>>, Receiver<Option<Vec<u8>>>) = channel();
     thread::spawn(move || {
         loop {
             if let Ok(received) = receiver.recv() {

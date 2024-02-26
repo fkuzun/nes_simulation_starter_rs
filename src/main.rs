@@ -139,7 +139,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if let Ok(true) = deployed {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;
-                            let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time;
+                            let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(25);
+                            // let timeout_duration = experiment_duration + Duration::from_secs(60);
                             let accept_result = timeout(timeout_duration, listener.accept()).await;
 
                             match accept_result {
@@ -173,7 +174,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             //check timeout
                             let current_time = SystemTime::now();
                             if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                                if elapsed_time > experiment_duration + experiment.input_config.parameters.cooldown_time * 2 {
+                                if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
                                     break;
                                 }
                             }
@@ -202,7 +203,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
                 tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
                 //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
-                create_notebook(&PathBuf::from(&file_path), &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
+                let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
+                if notebook_path.exists() {
+                    create_notebook(&PathBuf::from(&file_path), &notebook_path, &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
+                }
                 if (shutdown_triggered.load(Ordering::SeqCst)) {
                     break;
                 }
