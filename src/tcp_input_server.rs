@@ -27,7 +27,7 @@ fn main() -> std::io::Result<()> {
             std::process::exit(1);
         }
     };
-    let deadline = Instant::now() + std::time::Duration::from_secs(20);
+    let deadline = Instant::now() + std::time::Duration::from_secs(30);
      
     println!("Server listening on port {}...", port);
 

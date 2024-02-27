@@ -34,6 +34,7 @@ use serde_with::DurationMilliSeconds;
 use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
 use tokio::io::AsyncBufReadExt;
+use regex::Regex;
 
 pub mod analyze;
 
@@ -110,7 +111,7 @@ impl MultiSimulationInputConfig {
         format!("{}{}{}", short_name, self.get_short_name_value_separator(), value)
     }
 
-    pub fn generate_input_configs(&self) -> Vec<(String, InputConfig)> {
+    pub fn generate_input_configs(&self, number_of_runs: u64) -> Vec<(String, InputConfig, Vec<u64>)> {
         let mut configs = vec![];
         //let mut source_input_server_port = START_OF_SOURCE_INPUT_SERVER_PORT_RANGE;
         for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
@@ -148,7 +149,7 @@ impl MultiSimulationInputConfig {
                             short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
                             short_name.push_str(&self.get_short_name_to_short_name_separator());
                             short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
-                            configs.push((short_name, config));
+                            configs.push((short_name, config, (0..number_of_runs).collect()));
                         }
                     }
                 }
@@ -207,26 +208,25 @@ impl SimulationConfig {
         create_folder_with_timestamp(self.output_directory.clone(), self.input_config_path.file_name().unwrap().to_str().unwrap())
     }
 
-    pub fn generate_retrials(&self) -> Result<Vec<(String, InputConfig)>, Box<dyn Error>> {
+    pub fn generate_retrials(&self) -> Result<Vec<(String, InputConfig, Vec<u64>)>, Box<dyn Error>> {
 
         //iterate over all subfolders in retrial path and check for tuple_count files
         let mut setups = vec![];
+        let re  = Regex::new(r"out_run:(\d+)\.csvtuple_count\.csv").unwrap();
         for entry in fs::read_dir(self.run_for_retrial_path.as_ref().unwrap())? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
                 println!("Checking directory");
                 let mut tuple_count_output = None;
+                let mut runs_to_repeat = vec![];
                 for entry in fs::read_dir(&path)? {
                     let entry = entry?;
                     let path = entry.path();
                     if path.is_file() {
                         if let Some(name) = &path.file_name() {
-                            if name.to_str().unwrap().contains("tuple_count") {
-                                // let mut setup = self.generate_experiment_configs()?;
-                                // let mut setup = setup.pop().unwrap();
-                                // setup.experiment_output_path = path;
-                                // setups.push(setup);
+                            if let Some(captures) = re.captures(name.to_str().unwrap()) {
+                            //if name.to_str().unwrap().contains("tuple_count") {
                                 let content = fs::read_to_string(&path)?;
                                 println!("{}", content);
                                 let mut parts = content.trim().split(',');
@@ -235,19 +235,22 @@ impl SimulationConfig {
                                 let b: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
                                 let c: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
                                 tuple_count_output = Some((a, b, c));
-                                break;
+                                if let Some((_, 0, _)) | None = tuple_count_output {
+                                    runs_to_repeat.push(captures[1].parse().unwrap());
+                                }
                             }
                         }
                     }
                 }
-                if let Some((_, 0, _)) | None = tuple_count_output {
+                if !runs_to_repeat.is_empty() {
+                //if let Some((_, 0, _)) | None = tuple_count_output {
                     let config_path = path.join("input_config_copy.toml");
 
                     println!("Adding config");
                     let input_config = read_to_string(config_path).expect("Could not read config file");
                     println!("{:?}", input_config);
-                    let input_config: InputConfig = toml::from_str(&*input_config).expect("could not parse confit file");
-                    setups.push((entry.file_name().to_str().unwrap().to_string(), input_config));
+                    let input_config: InputConfig = toml::from_str(&*input_config).expect("could not parse config file");
+                    setups.push((entry.file_name().to_str().unwrap().to_string(), input_config, runs_to_repeat));
                 }
             }
         }
@@ -266,7 +269,7 @@ impl SimulationConfig {
         Ok(setups)
     }
 
-    pub fn generate_experiment_configs(&self) -> Result<Vec<ExperimentSetup>, Box<dyn Error>> {
+    pub fn generate_experiment_configs(&self, number_of_runs: u64) -> Result<Vec<(ExperimentSetup, Vec<u64>)>, Box<dyn Error>> {
         let (generated_main_folder, input_config_list) = if self.run_for_retrial_path.is_some() {
             let folder_prefix = self.run_for_retrial_path.as_ref().unwrap().file_name().unwrap().to_str().unwrap();
             let generated_main_folder = create_folder_with_timestamp(self.output_directory.clone(), folder_prefix);
@@ -275,11 +278,11 @@ impl SimulationConfig {
             let generated_main_folder = self.create_generated_folder();
             //let input_config = self.read_input_config();
             let multi_simulation_config = self.read_multi_simulation_input_config();
-            (generated_main_folder, multi_simulation_config.generate_input_configs())
+            (generated_main_folder, multi_simulation_config.generate_input_configs(number_of_runs))
         };
         //let input_config_list = multi_simulation_config.generate_input_configs();
         let mut setups = vec![];
-        for (short_name, input_config) in input_config_list {
+        for (short_name, input_config, runs) in input_config_list {
             let generated_folder = generated_main_folder.join(short_name);
             fs::create_dir_all(&generated_folder)?;
             let input_config_copy_path = generated_folder.join("input_config_copy.toml");
@@ -287,7 +290,7 @@ impl SimulationConfig {
             let mut file = File::create(input_config_copy_path)?;
             file.write_all(toml_string.as_bytes())?;
 
-            setups.push(input_config.generate_output_config(&generated_folder)?);
+            setups.push((input_config.generate_output_config(&generated_folder)?, runs));
         }
         Ok(setups)
         // let input_config_copy_path = generated_folder.join("input_config_copy.toml");
@@ -681,7 +684,7 @@ impl InputConfig {
                 point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
                 //add delay of 15 seconds before starting reconnects
                 if !point.offset.is_zero() {
-                    point.offset = point.offset.add(Duration::from_secs(25));
+                    point.offset = point.offset.add(Duration::from_secs(40));
                 }
                 
                 if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
@@ -715,7 +718,7 @@ impl InputConfig {
                         //add delay of 15 seconds before starting reconnects
                         //todo: make this a config parameter
                         if !reconnect.offset.is_zero() {
-                            reconnect.offset = reconnect.offset.add(Duration::from_secs(25));
+                            reconnect.offset = reconnect.offset.add(Duration::from_secs(40));
                         }
                         if reconnect.offset > self.parameters.runtime.sub(self.parameters.cooldown_time) {
                             println!("skip reconnect");

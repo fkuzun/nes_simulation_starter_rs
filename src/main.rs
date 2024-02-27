@@ -55,6 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //check if retrial is complete
     //let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/merged/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
 
+    let runs = 3;
 
     let simulation_config = SimulationConfig {
         nes_root_dir,
@@ -74,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // } else {
     //     simulation_config.generate_experiment_configs().expect("Could not create experiment")
     // };
-    let mut experiments = simulation_config.generate_experiment_configs().expect("Could not create experiment");
+    let mut experiments = simulation_config.generate_experiment_configs(3).expect("Could not create experiment");
 
     let shutdown_triggered = Arc::new(AtomicBool::new(false));
     let s = Arc::clone(&shutdown_triggered);
@@ -86,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut rt = tokio::runtime::Runtime::new().unwrap();
 
     let total_number_of_runs = experiments.len();
-    'all_experiments: for (index, experiment) in experiments.iter_mut().enumerate() {
+    'all_experiments: for (index, (experiment, runs)) in experiments.iter_mut().enumerate() {
         let run_number = index + 1;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
             experiment.kill_processes()?;
@@ -97,7 +98,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         println!("Starting experiment {} of {}", run_number, total_number_of_runs);
         println!("{}", toml::to_string(&experiment.input_config).unwrap());
-        for attempt in 1..=1 {
+        println!("performing runs {:?}", runs);
+        for attempt in runs {
+        //for attempt in 1..=3 {
             //start source input server
             //let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
             let mut source_input_server_process = Command::new(&input_server_path)
@@ -139,7 +142,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if let Ok(true) = deployed {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;
-                            let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(25);
+                            let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
                             // let timeout_duration = experiment_duration + Duration::from_secs(60);
                             let accept_result = timeout(timeout_duration, listener.accept()).await;
 
