@@ -271,16 +271,19 @@ impl SimulationConfig {
 
     pub fn generate_experiment_configs(&self, number_of_runs: u64) -> Result<Vec<(ExperimentSetup, Vec<u64>)>, Box<dyn Error>> {
         let (generated_main_folder, input_config_list) = if self.run_for_retrial_path.is_some() {
+            println!("rerun");
             let folder_prefix = self.run_for_retrial_path.as_ref().unwrap().file_name().unwrap().to_str().unwrap();
             let generated_main_folder = create_folder_with_timestamp(self.output_directory.clone(), folder_prefix);
             (generated_main_folder, self.generate_retrials()?)
         } else {
+            println!("generate new run");
             let generated_main_folder = self.create_generated_folder();
             //let input_config = self.read_input_config();
             let multi_simulation_config = self.read_multi_simulation_input_config();
             (generated_main_folder, multi_simulation_config.generate_input_configs(number_of_runs))
         };
         //let input_config_list = multi_simulation_config.generate_input_configs();
+        println!("writing setups");
         let mut setups = vec![];
         for (short_name, input_config, runs) in input_config_list {
             let generated_folder = generated_main_folder.join(short_name);
@@ -388,6 +391,25 @@ pub struct ExperimentSetup {
     pub num_buffers: u128,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ReconnectList {
+    pub timestamps: Vec<Vec<u64>>
+}
+
+
+pub fn get_reconnect_list(rest_port: u16) -> Result<ReconnectList, Box<dyn Error>> {
+    let client = reqwest::blocking::Client::new();
+    let result = client.get(format!("http://localhost:{}/v1/nes/query/reconnects", &rest_port.to_string())).send()?;
+    //println!("list: {:?}", &result.text().unwrap());
+    let reply: Vec<Vec<u64>> = result.json()?;
+    //println!("received reconnect list:");
+    println!("list: {:?}", reply);
+    // Ok(reply)
+    Ok(
+        ReconnectList {
+            timestamps: reply
+        })
+}
 impl ExperimentSetup {
     pub fn start(&mut self, executable_paths: &NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         self.kill_processes();
@@ -686,12 +708,12 @@ impl InputConfig {
                 if !point.offset.is_zero() {
                     point.offset = point.offset.add(Duration::from_secs(40));
                 }
-                
                 if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
                     println!("skip waypoint");
                     break;
                 }
                 
+
                 
                 csv_writer.serialize(point).unwrap();
             }
@@ -1170,7 +1192,7 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
     //     }
     // }
     //file.write_all(&buf[0..total_valid_byte_count])?;
-    
+
     let tuple_size = 40;
     let valid_bytes = buf.len() - (buf.len() % tuple_size);
     for i in (0..valid_bytes).step_by(tuple_size) {

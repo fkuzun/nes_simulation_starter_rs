@@ -197,6 +197,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("Writing error string: {}", error_string);
                     error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
                 }
+                //get_reconnect_list(8081).unwrap();
                 experiment.kill_processes()?;
                 source_input_server_process.kill()?;
                 let current_time = SystemTime::now();
@@ -222,6 +223,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 //todo: move inside the experiment impl
                 println!("Experiment failed to start");
             }
+            //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
             source_input_server_process.kill()?;
         }
