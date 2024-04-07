@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while timestamp < duration {
         parent = loop {
             let generated_parent = rng.gen_range(min_id..max_id);
-            if (generated_parent != parent && !fixed_nodes_hosting_sources.contains(&generated_parent)) {
+            if generated_parent != parent && !fixed_nodes_hosting_sources.contains(&generated_parent) {
                 break generated_parent;
             }
         };

@@ -85,7 +85,7 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
     });
 
     let mut sequence_nr = 0;
-    for buffer in 0..num_buffers {
+    for _buffer in 0..num_buffers {
         // Generate data to write into the socket
         let data = generate_data(id, &mut sequence_nr, buffer_size)?;
         sender.send(Some(data)).unwrap();

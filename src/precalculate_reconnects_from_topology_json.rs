@@ -17,10 +17,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
     let mut fixed_leaves = vec![];
     for (node_id, children) in topology.children {
-        if (children.is_empty()) {
+        if children.is_empty() {
             fixed_leaves.push(node_id);
         }
     }
+    
+    //todo: set these from somewhre else 
+    let min_id = 6;
+    let max_id = 26;
 
     let mut rng = rand::thread_rng();
     let fixed_nodes_hosting_sources = if args.len() == 5 {
@@ -47,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while timestamp < duration {
         parent = loop {
             let generated_parent = rng.gen_range(min_id..max_id);
-            if (generated_parent != parent && !fixed_nodes_hosting_sources.contains(&generated_parent)) {
+            if generated_parent != parent && !fixed_nodes_hosting_sources.contains(&generated_parent) {
                 break generated_parent;
             }
         };
