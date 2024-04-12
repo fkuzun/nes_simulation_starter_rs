@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{hash_map, HashMap};
 use std::error::Error;
 use std::fmt::format;
 use std::hash::Hasher;
@@ -373,7 +373,8 @@ pub struct Parameters {
     pub reconnect_input_type: ReconnectPredictorType,
     pub source_input_server_port: u16,
     pub query_string: String,
-    pub place_default_source_on_fixed_node_ids: Vec<u64>,
+    //#[serde_as(as = "HashMap<String, String>")]
+    pub place_default_source_on_fixed_node_ids: HashMap<String, String>,
     pub num_worker_threads: u64,
 }
 
@@ -455,7 +456,7 @@ impl ExperimentSetup {
         //let rest_port = get_available_port(PORT_RANGE).ok_or("Could not find available port")?;
         let rest_port = 8081;
 
-        //self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port, &log_level)?;
+        self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port, &log_level)?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered), rest_port)?;
         // wait_for_topology(Some(2), Arc::clone(&shutdown_triggered), rest_port)?;
@@ -641,12 +642,13 @@ impl InputConfig {
             if input_id > &max_fixed_id {
                 max_fixed_id = *input_id;
             }
-            let (physical_sources, number_of_slots) = if self.parameters.place_default_source_on_fixed_node_ids.contains(input_id) {
+            let (physical_sources, number_of_slots) = if let Some((_, logical_source_name))  = self.parameters.place_default_source_on_fixed_node_ids.get_key_value(&input_id.to_string()) {
                 let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
                 total_number_of_tuples_to_ingest += num_tuples;
                 (vec![
                     PhysicalSource {
-                        logicalSourceName: "values".to_owned(),
+                        //logicalSourceName: "values".to_owned(),
+                        logicalSourceName: logical_source_name.to_string(),
                         physicalSourceName: "values".to_owned(),
                         Type: PhysicalSourceType::CSV_SOURCE,
                         configuration: PhysicalSourceConfiguration {
