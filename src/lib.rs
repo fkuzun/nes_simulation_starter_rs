@@ -58,6 +58,38 @@ fn port_is_available(port: u16) -> bool {
     }
 }
 
+pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(), Box<dyn Error>> {
+    let client = reqwest::blocking::Client::new();
+    for (parent_id, child_id) in edges {
+        if parent_id == &1 {
+            continue;
+        }
+        let link_request = AddEdgeRequest {
+            parent_id: *parent_id,
+            child_id: *child_id,
+        };
+        let result = client.post(format!("http://127.0.0.1:{}/v1/nes/topology/addAsChild", &rest_port.to_string()))
+            .json(&link_request).send()?;
+        //println!("{}", result.text().unwrap());
+        let reply: AddEdgeReply = result.json()?;
+        if !reply.success {
+            return Err("Could not add edge".into());
+        }
+        let link_request = AddEdgeRequest {
+            parent_id: 1,
+            child_id: *child_id,
+        };
+        let result = client.delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
+            .json(&link_request).send()?;
+        //assert!(result.json().unwrap());
+        let reply: AddEdgeReply = result.json()?;
+        if !reply.success {
+            return Err("Could not add edge".into());
+        }
+    };
+    Ok(())
+}
+
 //const START_OF_SOURCE_INPUT_SERVER_PORT_RANGE: u16 = 10_000;
 //const START_OF_SINK_OUTPUT_SERVER_PORT_RANGE: u16 = 11_000;
 //const START_OF_SINK_OUTPUT_SERVER_PORT_RANGE: u16 = 11_000;
@@ -392,6 +424,7 @@ pub struct ExperimentSetup {
     pub input_config: InputConfig,
     pub total_number_of_tuples_to_ingest: u64,
     pub num_buffers: u128,
+    pub central_topology_updates: Vec<TopologyUpdate>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -422,7 +455,7 @@ impl ExperimentSetup {
         //let rest_port = get_available_port(PORT_RANGE).ok_or("Could not find available port")?;
         let rest_port = 8081;
 
-        self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port, &log_level)?;
+        //self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port, &log_level)?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered), rest_port)?;
         // wait_for_topology(Some(2), Arc::clone(&shutdown_triggered), rest_port)?;
@@ -462,36 +495,10 @@ impl ExperimentSetup {
     }
 
     fn add_edges(&self, rest_port: u16) -> Result<(), Box<dyn Error>> {
-        let client = reqwest::blocking::Client::new();
-        for (parent_id, child_id) in &self.edges {
-            if parent_id == &1 {
-                continue;
-            }
-            let link_request = AddEdgeRequest {
-                parent_id: *parent_id,
-                child_id: *child_id,
-            };
-            let result = client.post(format!("http://127.0.0.1:{}/v1/nes/topology/addAsChild", &rest_port.to_string()))
-                .json(&link_request).send()?;
-            //println!("{}", result.text().unwrap());
-            let reply: AddEdgeReply = result.json()?;
-            if !reply.success {
-                return Err("Could not add edge".into());
-            }
-            let link_request = AddEdgeRequest {
-                parent_id: 1,
-                child_id: *child_id,
-            };
-            let result = client.delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
-                .json(&link_request).send()?;
-            //assert!(result.json().unwrap());
-            let reply: AddEdgeReply = result.json()?;
-            if !reply.success {
-                return Err("Could not add edge".into());
-            }
-        };
-        Ok(())
+        let edges = &self.edges;
+        add_edges_from_list(&rest_port, edges)
     }
+
 
     pub fn kill_processes(&mut self) -> Result<(), Box<dyn Error>> {
         for mobile_worker in &mut self.mobile_worker_processes {
@@ -859,6 +866,7 @@ impl InputConfig {
             input_config: self.clone(),
             num_buffers,
             generated_folder: generated_folder.to_path_buf(),
+            central_topology_updates: cvec,
         })
     }
 }

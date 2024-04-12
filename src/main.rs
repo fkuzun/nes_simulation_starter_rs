@@ -13,6 +13,7 @@ use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local};
+use reqwest::Url;
 use tokio::task;
 use tokio::time::timeout;
 use simulation_runner_lib::*;
@@ -117,6 +118,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             let now: DateTime<Local> = Local::now();
             println!("{}: Starting attempt {}", now, attempt);
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
+
+                let rest_port = 8081;
+                // create rest topology updater
+                let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
+                    experiment.central_topology_updates.clone(), 
+                    experiment_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
+                    Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap());
+                //todo: check if we need to join this thread
+                let rest_topology_updater_thread = rest_topology_updater.start();
+
+                
                 //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                 let desired_line_count = experiment.total_number_of_tuples_to_ingest;
                 // Bind the TCP listener to the specified address and port
