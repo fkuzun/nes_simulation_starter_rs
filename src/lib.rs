@@ -35,8 +35,11 @@ use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
 use tokio::io::AsyncBufReadExt;
 use regex::Regex;
+use crate::rest_node_relocation::TopologyUpdate;
 
 pub mod analyze;
+
+pub mod rest_node_relocation;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
@@ -577,7 +580,7 @@ impl InputConfig {
 
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
-            enableQueryReconfiguration: self.parameters.enable_query_reconfiguration,
+            //enableIncrementalPlacement: self.parameters.enable_query_reconfiguration,
             enableProactiveDeployment: self.parameters.enable_proactive_deployment,
             logicalSources: vec![
                 LogicalSource {
@@ -607,6 +610,9 @@ impl InputConfig {
                 }
             ],
             logLevel: LogLevel::LOG_ERROR,
+            optimizer: OptimizerConfiguration {
+                enableIncrementalPlacement: self.parameters.enable_query_reconfiguration
+            },
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
@@ -679,6 +685,9 @@ impl InputConfig {
         let mobility_input_config = MobilityInputConfigList::read_input_from_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))?;
         let mut generated_mobility_configs = vec![];
         let mut input_id = max_fixed_id + 1;
+        
+        let mut central_topology_update_list = rest_node_relocation::TopologyUpdateList::new();
+        
         for worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
             //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
             //todo: can we remove the cretion of csv source?
@@ -720,6 +729,8 @@ impl InputConfig {
 
             csv_writer.flush().unwrap();
 
+            //let mut previous_parent = None;
+            let mut previous_parent_id= 1;
             let output_precalculated_reconnects = match worker_mobility_input_config.reconnectPredictorType {
                 ReconnectPredictorType::LIVE => { "none".into() }
                 ReconnectPredictorType::PRECALCULATED => {
@@ -746,6 +757,14 @@ impl InputConfig {
                             println!("skip reconnect");
                             break;
                         }
+                        // if let Some(previous_parent_id) = previous_parent {
+                        //     central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id)
+                        // } else {
+                        //     central_topology_update_list.add_initial_connect(input_id, reconnect.parent_id);
+                        // }
+                        central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id);
+                        //previous_parent = Some(reconnect.parent_id);
+                        previous_parent_id = reconnect.parent_id;
                         csv_writer.serialize(reconnect).unwrap();
                     }
                     csv_writer.flush().unwrap();
@@ -802,9 +821,16 @@ impl InputConfig {
             let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
             total_number_of_tuples_to_ingest += num_tuples;
         };
-
+        
+        let cvec: Vec<TopologyUpdate> = central_topology_update_list.into();
+        let reconnect_json = serde_json::to_string_pretty(&cvec).unwrap();
+        println!("{}", reconnect_json);
+        
+        let output_central_reconnect_path = output_trajectory_directory.join("central_reconnects.json");
+        fs::write(&output_central_reconnect_path, reconnect_json).expect("Could not write central reconnects");
         let list_of_generated_mobility_configs = MobilityInputConfigList {
             worker_mobility_configs: generated_mobility_configs,
+            central_topology_update_list_path: Some(output_central_reconnect_path.clone()),
         };
         list_of_generated_mobility_configs.write_to_file(&output_trajectory_directory.join("mobility_configs.toml"));
 
@@ -846,6 +872,7 @@ pub enum ReconnectPredictorType {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MobilityInputConfigList {
     pub worker_mobility_configs: Vec<Mobilityconfig>,
+    pub central_topology_update_list_path: Option<PathBuf>,
 }
 
 
@@ -1052,10 +1079,15 @@ struct LogicalSource {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CoordinatorConfiguration {
-    enableQueryReconfiguration: bool,
     enableProactiveDeployment: bool,
     logicalSources: Vec<LogicalSource>,
     logLevel: LogLevel,
+    optimizer: OptimizerConfiguration,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OptimizerConfiguration {
+    enableIncrementalPlacement: bool
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
