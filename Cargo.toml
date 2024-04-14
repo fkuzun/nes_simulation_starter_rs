@@ -39,6 +39,10 @@ path = "src/timestamp_reconnect_list.rs"
 name = "retry_experiments"
 path = "src/retry_experiments.rs"
 
+[[bin]]
+name = "test_toml"
+path = "src/test_toml.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

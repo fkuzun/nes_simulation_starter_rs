@@ -374,7 +374,8 @@ pub struct Parameters {
     pub source_input_server_port: u16,
     pub query_strings: Vec<String>,
     //#[serde_as(as = "HashMap<String, String>")]
-    pub place_default_source_on_fixed_node_ids: HashMap<String, String>,
+    
+    pub place_default_sources_on_node_ids: HashMap<String, Vec<String>>,
     pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
 }
@@ -480,7 +481,7 @@ impl ExperimentSetup {
 
         Ok(())
     }
-    
+
     pub fn submit_queries(output_port: u16, query_strings: Vec<String>) -> Result<(), Box<dyn Error>> {
         for query_string in query_strings {
             Self::submit_query(output_port, query_string)?;
@@ -680,37 +681,55 @@ impl InputConfig {
             if input_id > &max_fixed_id {
                 max_fixed_id = *input_id;
             }
-            let (physical_sources, number_of_slots) = if let Some((_, logical_source_name))  = self.parameters.place_default_source_on_fixed_node_ids.get_key_value(&input_id.to_string()) {
+            let (physical_sources, number_of_slots) = if let Some((_, logical_source_names))  = self.parameters.place_default_sources_on_node_ids.get_key_value(&input_id.to_string()) {
                 let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
                 total_number_of_tuples_to_ingest += num_tuples;
-                (vec![
-                    PhysicalSource {
-                        //logicalSourceName: "values".to_owned(),
+                let mut sources = vec![];
+                
+                //iterate over logical source names
+                for (index, logical_source_name) in logical_source_names.iter().enumerate() {
+                    sources.push(PhysicalSource {
                         logicalSourceName: logical_source_name.to_string(),
-                        physicalSourceName: "values".to_owned(),
+                        physicalSourceName: format!("physical_{}", index).to_owned(),
                         Type: PhysicalSourceType::CSV_SOURCE,
                         configuration: PhysicalSourceConfiguration {
-                            //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
                             filePath: self.parameters.source_input_server_port.to_string(),
                             skipHeader: false,
-                            //todo: fix this
-                            //sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
-                            sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
-                            //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
+                            sourceGatheringInterval: time::Duration::from_millis(0),
                             numberOfTuplesToProducePerBuffer,
-                            //numberOfBuffersToProduce: num_buffers.try_into()?,
                         },
-                    }
-                ], 1)
+                    });
+                }
+                
+                // (vec![
+                //     PhysicalSource {
+                //         //logicalSourceName: "values".to_owned(),
+                //         logicalSourceName: logical_source_name.to_string(),
+                //         physicalSourceName: "values".to_owned(),
+                //         Type: PhysicalSourceType::CSV_SOURCE,
+                //         configuration: PhysicalSourceConfiguration {
+                //             //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
+                //             filePath: self.parameters.source_input_server_port.to_string(),
+                //             skipHeader: false,
+                //             //todo: fix this
+                //             //sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
+                //             sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
+                //             //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
+                //             numberOfTuplesToProducePerBuffer,
+                //             //numberOfBuffersToProduce: num_buffers.try_into()?,
+                //         },
+                //     }
+                let source_count = sources.len() as u16;
+                (sources, Some(source_count))
             } else {
-                (vec![], 60000)
+                (vec![], None)
             };
             let worker_config = FixedWorkerConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
                 //numberOfSlots: 6000, //todo: set to 1 to stress test the plan creation
                 //numberOfSlots: number_of_slots,
-                numberOfSlots: *topology.slots.get(input_id).unwrap(),
+                numberOfSlots: number_of_slots.unwrap_or(*topology.slots.get(input_id).unwrap()),
                 nodeSpatialType: "FIXED_LOCATION".to_string(),
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
                 workerId: *input_id,
