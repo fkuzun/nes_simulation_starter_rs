@@ -375,6 +375,7 @@ pub struct Parameters {
     pub query_string: String,
     //#[serde_as(as = "HashMap<String, String>")]
     pub place_default_source_on_fixed_node_ids: HashMap<String, String>,
+    pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
 }
 
@@ -585,38 +586,68 @@ impl InputConfig {
         //todo: set port here
         let sink_output_path = generated_folder.join("replace_me.csv");
         let experiment_output_path = generated_folder.join("out");
+        let mut logicalSources = vec![];
+        
+        for name in &self.parameters.logical_source_names {
+            logicalSources.push(LogicalSource {
+                logicalSourceName: name.to_string(),
+                fields: vec![
+                    LogicalSourceField {
+                        name: "id".to_string(),
+                        Type: UINT64,
+                    },
+                    LogicalSourceField {
+                        name: "value".to_string(),
+                        Type: UINT64,
+                    },
+                    LogicalSourceField {
+                        name: "ingestion_timestamp".to_string(),
+                        Type: UINT64,
+                    },
+                    LogicalSourceField {
+                        name: "processing_timestamp".to_string(),
+                        Type: UINT64,
+                    },
+                    LogicalSourceField {
+                        name: "output_timestamp".to_string(),
+                        Type: UINT64,
+                    },
+                ],
+            });
+        }
 
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
             //enableIncrementalPlacement: self.parameters.enable_query_reconfiguration,
             enableProactiveDeployment: self.parameters.enable_proactive_deployment,
-            logicalSources: vec![
-                LogicalSource {
-                    logicalSourceName: "values".to_string(),
-                    fields: vec![
-                        LogicalSourceField {
-                            name: "id".to_string(),
-                            Type: UINT64,
-                        },
-                        LogicalSourceField {
-                            name: "value".to_string(),
-                            Type: UINT64,
-                        },
-                        LogicalSourceField {
-                            name: "ingestion_timestamp".to_string(),
-                            Type: UINT64,
-                        },
-                        LogicalSourceField {
-                            name: "processing_timestamp".to_string(),
-                            Type: UINT64,
-                        },
-                        LogicalSourceField {
-                            name: "output_timestamp".to_string(),
-                            Type: UINT64,
-                        },
-                    ],
-                }
-            ],
+            // logicalSources: vec![
+            //     LogicalSource {
+            //         logicalSourceName: "values".to_string(),
+            //         fields: vec![
+            //             LogicalSourceField {
+            //                 name: "id".to_string(),
+            //                 Type: UINT64,
+            //             },
+            //             LogicalSourceField {
+            //                 name: "value".to_string(),
+            //                 Type: UINT64,
+            //             },
+            //             LogicalSourceField {
+            //                 name: "ingestion_timestamp".to_string(),
+            //                 Type: UINT64,
+            //             },
+            //             LogicalSourceField {
+            //                 name: "processing_timestamp".to_string(),
+            //                 Type: UINT64,
+            //             },
+            //             LogicalSourceField {
+            //                 name: "output_timestamp".to_string(),
+            //                 Type: UINT64,
+            //             },
+            //         ],
+            //     }
+            // ],
+            logicalSources,
             logLevel: LogLevel::LOG_ERROR,
             optimizer: OptimizerConfiguration {
                 enableIncrementalPlacement: self.parameters.enable_query_reconfiguration
