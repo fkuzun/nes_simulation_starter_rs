@@ -374,7 +374,7 @@ pub struct Parameters {
     pub source_input_server_port: u16,
     pub query_strings: Vec<String>,
     //#[serde_as(as = "HashMap<String, String>")]
-    
+
     pub place_default_sources_on_node_ids: HashMap<String, Vec<String>>,
     pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
@@ -681,49 +681,7 @@ impl InputConfig {
             if input_id > &max_fixed_id {
                 max_fixed_id = *input_id;
             }
-            let (physical_sources, number_of_slots) = if let Some((_, logical_source_names))  = self.parameters.place_default_sources_on_node_ids.get_key_value(&input_id.to_string()) {
-                let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
-                total_number_of_tuples_to_ingest += num_tuples;
-                let mut sources = vec![];
-                
-                //iterate over logical source names
-                for (index, logical_source_name) in logical_source_names.iter().enumerate() {
-                    sources.push(PhysicalSource {
-                        logicalSourceName: logical_source_name.to_string(),
-                        physicalSourceName: format!("physical_{}", index).to_owned(),
-                        Type: PhysicalSourceType::CSV_SOURCE,
-                        configuration: PhysicalSourceConfiguration {
-                            filePath: self.parameters.source_input_server_port.to_string(),
-                            skipHeader: false,
-                            sourceGatheringInterval: time::Duration::from_millis(0),
-                            numberOfTuplesToProducePerBuffer,
-                        },
-                    });
-                }
-                
-                // (vec![
-                //     PhysicalSource {
-                //         //logicalSourceName: "values".to_owned(),
-                //         logicalSourceName: logical_source_name.to_string(),
-                //         physicalSourceName: "values".to_owned(),
-                //         Type: PhysicalSourceType::CSV_SOURCE,
-                //         configuration: PhysicalSourceConfiguration {
-                //             //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
-                //             filePath: self.parameters.source_input_server_port.to_string(),
-                //             skipHeader: false,
-                //             //todo: fix this
-                //             //sourceGatheringInterval: time::Duration::from_millis(100), //self.default_source_input.gathering_interval,
-                //             sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
-                //             //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
-                //             numberOfTuplesToProducePerBuffer,
-                //             //numberOfBuffersToProduce: num_buffers.try_into()?,
-                //         },
-                //     }
-                let source_count = sources.len() as u16;
-                (sources, Some(source_count))
-            } else {
-                (vec![], None)
-            };
+            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, *input_id);
             let worker_config = FixedWorkerConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
@@ -849,6 +807,7 @@ impl InputConfig {
             };
 
             generated_mobility_configs.push(generated_mobility_config.clone());
+            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, input_id);
 
             //create config
             let worker_config = MobileWorkerConfig {
@@ -856,26 +815,28 @@ impl InputConfig {
                 rpcPort: next_free_port,
                 dataPort: next_free_port + 1,
                 workerId: input_id,
-                numberOfSlots: 1,
+                //numberOfSlots: 1,
+                numberOfSlots: number_of_slots.unwrap(),
                 nodeSpatialType: "MOBILE_NODE".to_owned(),
                 mobility: generated_mobility_config,
-                physicalSources: vec![
-                    PhysicalSource {
-                        logicalSourceName: "values".to_owned(),
-                        physicalSourceName: "values".to_owned(),
-                        Type: PhysicalSourceType::CSV_SOURCE,
-                        configuration: PhysicalSourceConfiguration {
-                            //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
-                            filePath: self.parameters.source_input_server_port.to_string(),
-                            skipHeader: false,
-                            //todo: fix this
-                            sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
-                            //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
-                            numberOfTuplesToProducePerBuffer,
-                            //numberOfBuffersToProduce: num_buffers.try_into()?,
-                        },
-                    }
-                ],
+                // physicalSources: vec![
+                //     PhysicalSource {
+                //         logicalSourceName: "values".to_owned(),
+                //         physicalSourceName: "values".to_owned(),
+                //         Type: PhysicalSourceType::CSV_SOURCE,
+                //         configuration: PhysicalSourceConfiguration {
+                //             //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
+                //             filePath: self.parameters.source_input_server_port.to_string(),
+                //             skipHeader: false,
+                //             //todo: fix this
+                //             sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
+                //             //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
+                //             numberOfTuplesToProducePerBuffer,
+                //             //numberOfBuffersToProduce: num_buffers.try_into()?,
+                //         },
+                //     }
+                // ],
+                physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
             };
@@ -885,7 +846,7 @@ impl InputConfig {
             input_id += 1;
             next_free_port += 2;
             let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
-            total_number_of_tuples_to_ingest += num_tuples;
+            //total_number_of_tuples_to_ingest += num_tuples;
         };
         
         let cvec: Vec<TopologyUpdate> = central_topology_update_list.into();
@@ -927,6 +888,35 @@ impl InputConfig {
             generated_folder: generated_folder.to_path_buf(),
             central_topology_updates: cvec,
         })
+    }
+
+    fn get_physical_sources_for_node(&self, numberOfTuplesToProducePerBuffer: u64, num_buffers: u128, total_number_of_tuples_to_ingest: &mut u64, input_id: u64) -> (Vec<PhysicalSource>, Option<u16>) {
+        let (physical_sources, number_of_slots) = if let Some((_, logical_source_names)) = self.parameters.place_default_sources_on_node_ids.get_key_value(&input_id.to_string()) {
+            let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
+            let mut sources = vec![];
+
+            //iterate over logical source names
+            for (index, logical_source_name) in logical_source_names.iter().enumerate() {
+                *total_number_of_tuples_to_ingest += num_tuples;
+                sources.push(PhysicalSource {
+                    logicalSourceName: logical_source_name.to_string(),
+                    physicalSourceName: format!("physical_{}", index).to_owned(),
+                    Type: PhysicalSourceType::CSV_SOURCE,
+                    configuration: PhysicalSourceConfiguration {
+                        filePath: self.parameters.source_input_server_port.to_string(),
+                        skipHeader: false,
+                        sourceGatheringInterval: time::Duration::from_millis(0),
+                        numberOfTuplesToProducePerBuffer,
+                    },
+                });
+            }
+
+            let source_count = sources.len() as u16;
+            (sources, Some(source_count))
+        } else {
+            (vec![], None)
+        };
+        (physical_sources, number_of_slots)
     }
 }
 
