@@ -140,7 +140,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let file_path = format!("{}_run:{}.csv", &experiment.experiment_output_path.to_str().unwrap(), attempt);
                 let mut file = File::create(&file_path).unwrap();
                 let mut file = Arc::new(file);
-                let query_string = experiment.input_config.parameters.query_string.clone();
+                let query_string = experiment.input_config.parameters.query_strings.clone();
                 std::thread::sleep(Duration::from_secs(5));
 
                 // Use the runtime
@@ -150,7 +150,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                     let listener_port = listener.local_addr().unwrap().port();
                     println!("Listening for output tuples on port {}", listener_port);
-                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_query(listener_port, query_string).is_ok()}).await;
+                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
                     if let Ok(true) = deployed {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;

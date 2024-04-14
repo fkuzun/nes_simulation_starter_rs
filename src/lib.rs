@@ -372,7 +372,7 @@ pub struct Parameters {
     pub cooldown_time: Duration,
     pub reconnect_input_type: ReconnectPredictorType,
     pub source_input_server_port: u16,
-    pub query_string: String,
+    pub query_strings: Vec<String>,
     //#[serde_as(as = "HashMap<String, String>")]
     pub place_default_source_on_fixed_node_ids: HashMap<String, String>,
     pub logical_source_names: Vec<String>,
@@ -478,6 +478,13 @@ impl ExperimentSetup {
 
         sleep(Duration::from_secs(2));
 
+        Ok(())
+    }
+    
+    pub fn submit_queries(output_port: u16, query_strings: Vec<String>) -> Result<(), Box<dyn Error>> {
+        for query_string in query_strings {
+            Self::submit_query(output_port, query_string)?;
+        }
         Ok(())
     }
 
