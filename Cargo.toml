@@ -62,3 +62,4 @@ serde_with = { version = "3.5.1", features = ["chrono_0_4"] }
 tokio = "1.28.2"
 rand = "0.8.5"
 regex = "1.10.3"
+relative-path = { version = "1.9.2", features = ["serde"] }

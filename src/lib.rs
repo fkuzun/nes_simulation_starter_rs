@@ -35,6 +35,7 @@ use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
 use tokio::io::AsyncBufReadExt;
 use regex::Regex;
+use relative_path::RelativePathBuf;
 use crate::rest_node_relocation::TopologyUpdate;
 
 pub mod analyze;
@@ -229,12 +230,14 @@ impl SimulationConfig {
     }
 
     fn read_input_config(&self) -> InputConfig {
-        let input_config: InputConfig = toml::from_str(&*read_to_string(&self.get_input_config_path()).expect("Could not read config file")).expect("could not parse confit file");
+        let input_config: InputConfig = toml::from_str(&*read_to_string(&self.get_input_config_path()).expect("Could not read config file")).expect("could not parse config file");
         input_config
     }
 
     fn read_multi_simulation_input_config(&self) -> MultiSimulationInputConfig {
-        let input_config: MultiSimulationInputConfig = toml::from_str(&*read_to_string(&self.get_input_config_path()).expect("Could not read config file")).expect("could not parse confit file");
+        let base_path = self.get_input_config_path();
+        let mut input_config: MultiSimulationInputConfig = toml::from_str(&read_to_string(&base_path).expect("Could not read config file")).expect("could not parse config file");
+        input_config.default_config.paths.set_base_path(base_path);
         input_config
     }
 
@@ -398,8 +401,30 @@ pub enum SourceInputMethod {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Paths {
-    fixed_topology_nodes: String,
-    mobile_trajectories_directory: String,
+    #[serde(skip)]
+    base_path: Option<PathBuf>,
+    fixed_topology_nodes: RelativePathBuf,
+    mobile_trajectories_directory: RelativePathBuf,
+}
+
+impl Paths {
+    pub fn get_fixed_topology_nodes_path(&self) -> PathBuf {
+        self.fixed_topology_nodes.to_path(self.base_path.as_ref().expect("base path not set"))
+    }
+
+    pub fn get_mobile_trajectories_directory(&self) -> PathBuf {
+        self.mobile_trajectories_directory.to_path(self.base_path.as_ref().expect("base path not set"))
+    }
+
+    pub fn get_mobility_config_list_path(&self) -> PathBuf {
+        let mut path = self.get_mobile_trajectories_directory();
+        path.push("mobility_config_list.toml");
+        path
+    }
+    
+    pub fn set_base_path(&mut self, base_path: PathBuf) {
+        self.base_path = Some(base_path);
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -664,7 +689,7 @@ impl InputConfig {
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
         //start fixed workers
-        let json_string = std::fs::read_to_string(&self.paths.fixed_topology_nodes)?;
+        let json_string = std::fs::read_to_string(&self.paths.get_fixed_topology_nodes_path())?;
         let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
 
         let numberOfTuplesToProducePerBuffer = match self.default_source_input.source_input_method {
@@ -706,7 +731,7 @@ impl InputConfig {
 
 
         let mut mobile_config_paths = vec![];
-        let mobility_input_config = MobilityInputConfigList::read_input_from_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))?;
+        let mobility_input_config = MobilityInputConfigList::read_input_from_file(&self.paths.get_mobility_config_list_path())?;
         let mut generated_mobility_configs = vec![];
         let mut input_id = max_fixed_id + 1;
         
