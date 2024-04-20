@@ -235,9 +235,9 @@ impl SimulationConfig {
     }
 
     fn read_multi_simulation_input_config(&self) -> MultiSimulationInputConfig {
-        let base_path = self.get_input_config_path();
-        let mut input_config: MultiSimulationInputConfig = toml::from_str(&read_to_string(&base_path).expect("Could not read config file")).expect("could not parse config file");
-        input_config.default_config.paths.set_base_path(base_path);
+        let file_path = self.get_input_config_path();
+        let mut input_config: MultiSimulationInputConfig = toml::from_str(&read_to_string(&file_path).expect("Could not read config file")).expect("could not parse config file");
+        input_config.default_config.paths.set_base_path(file_path.parent().expect("could not get parent path of input config file").to_owned());
         input_config
     }
 
@@ -629,6 +629,7 @@ impl ExperimentSetup {
 
 impl InputConfig {
     fn generate_output_config(&self, mut generated_folder: &Path) -> Result<ExperimentSetup, Box<dyn Error>> {
+        println!("generating output config");
         // let input_trajectories_directory = &self.paths.mobile_trajectories_directory;
         let output_config_directory = generated_folder.join("config");
         fs::create_dir_all(&output_config_directory).expect("Failed to create folder");
@@ -645,6 +646,7 @@ impl InputConfig {
         let experiment_output_path = generated_folder.join("out");
         let mut logicalSources = vec![];
         
+        println!("generating logical sources");
         for name in &self.parameters.logical_source_names {
             logicalSources.push(LogicalSource {
                 logicalSourceName: name.to_string(),
@@ -673,6 +675,7 @@ impl InputConfig {
             });
         }
 
+        println!("generating coordinator config");
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
             //enableIncrementalPlacement: self.parameters.enable_query_reconfiguration,
@@ -712,15 +715,18 @@ impl InputConfig {
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
+        println!("reading fixed topology: {}", self.paths.get_fixed_topology_nodes_path().to_str().unwrap());
         //start fixed workers
         let json_string = std::fs::read_to_string(&self.paths.get_fixed_topology_nodes_path())?;
         let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
 
+        
         let numberOfTuplesToProducePerBuffer = match self.default_source_input.source_input_method {
             SourceInputMethod::CSV => { self.default_source_input.tuples_per_buffer.try_into()? }
             SourceInputMethod::TCP => { 0 }
         };
 
+        println!("generating fixed worker configs");
         let mut next_free_port = 5000;
         let mut fixed_config_paths = vec![];
         let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
@@ -754,6 +760,7 @@ impl InputConfig {
         }
 
 
+        println!("reading mobility config from {}", self.paths.get_mobility_config_list_path().to_str().unwrap());
         let mut mobile_config_paths = vec![];
         let mobility_input_config = MobilityInputConfigList::read_input_from_file(&self.paths.get_mobility_config_list_path())?;
         let mut generated_mobility_configs = vec![];
@@ -761,18 +768,22 @@ impl InputConfig {
         
         let mut central_topology_update_list = rest_node_relocation::TopologyUpdateList::new();
         
-        for worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
-            let worker_mobility_input_config = worker_mobility_input_config.to_mobility_config();
+        println!("generating mobile worker configs");
+        for mut worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
+            //worker_mobility_input_config.mobility_base_path = Some(self.paths.get_mobile_trajectories_directory());
+            worker_mobility_input_config.mobility_base_path = Some(self.paths.get_mobile_trajectories_directory());
+            let worker_mobility_output_config = worker_mobility_input_config.to_mobility_config();
             //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
             //todo: can we remove the cretion of csv source?
             // let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
-            let mobile_trajectory_file = worker_mobility_input_config.locationProviderConfig;
-            //let mobile_trajectory_file = worker_mobility_input_config.get_location_provider_config_path();
+            // let mobile_trajectory_file = worker_mobility_input_config.locationProviderConfig;
+            let mobile_trajectory_file = worker_mobility_input_config.get_location_provider_config_path();
             //todo: find more elegant solution for this
             if mobile_trajectory_file.extension().unwrap().to_str().unwrap() != "csv" {
                 continue;
             }
 
+            println!("reading trajectories from {}", mobile_trajectory_file.to_str().unwrap());
             let mut rdr = csv::ReaderBuilder::new()
                 .has_headers(false)
                 .from_path(mobile_trajectory_file.as_path()).unwrap();
@@ -809,8 +820,9 @@ impl InputConfig {
             let output_precalculated_reconnects = match worker_mobility_input_config.reconnectPredictorType {
                 ReconnectPredictorType::LIVE => { "none".into() }
                 ReconnectPredictorType::PRECALCULATED => {
-                    let input_precalculated_reconnects = worker_mobility_input_config.precalcReconnectPath;
-                    // let input_precalculated_reconnects = worker_mobility_input_config.get_precalc_reconnect_path();
+                    // let input_precalculated_reconnects = worker_mobility_input_config.precalcReconnectPath;
+                    let input_precalculated_reconnects = worker_mobility_input_config.get_precalc_reconnect_path();
+                    println!("reading precalculated reconnects from {}", input_precalculated_reconnects.to_str().unwrap());
                     let mut rdr = csv::ReaderBuilder::new()
                         .has_headers(false)
                         .from_path(&input_precalculated_reconnects).unwrap();
@@ -991,7 +1003,7 @@ pub struct MobilityInputConfigList {
 
 impl MobilityInputConfigList {
     fn read_input_from_file(file_path: &Path) -> Result<Self, Box<dyn Error>> {
-        let config: Self = toml::from_str(&*read_to_string(file_path)?)?;
+        let config: Self = toml::from_str(&read_to_string(file_path)?)?;
         Ok(config)
     }
 
@@ -1158,7 +1170,7 @@ struct FixedWorkerConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mobilityconfig {
-    //pub locationProviderConfig: PathBuf,
+    pub locationProviderConfig: PathBuf,
     pub locationProviderType: String,
     pub reconnectPredictorType: ReconnectPredictorType,
     pub precalcReconnectPath: PathBuf,
@@ -1168,8 +1180,8 @@ pub struct Mobilityconfig {
 pub struct InputMobilityconfig {
     #[serde(skip)]
     mobility_base_path: Option<PathBuf>,
-    //#[serde(deserialize_with = "deserialize_relative_path")]
-    //locationProviderConfig: RelativePathBuf,
+    #[serde(deserialize_with = "deserialize_relative_path")]
+    locationProviderConfig: RelativePathBuf,
     pub locationProviderType: String,
     pub reconnectPredictorType: ReconnectPredictorType,
     #[serde(deserialize_with = "deserialize_relative_path")]
@@ -1177,9 +1189,9 @@ pub struct InputMobilityconfig {
 }
 
 impl InputMobilityconfig {
-    // pub fn get_location_provider_config_path(&self) -> PathBuf {
-    //     self.locationProviderConfig.to_path(self.mobility_base_path.as_ref().expect("mobility base path not set"))
-    // }
+    pub fn get_location_provider_config_path(&self) -> PathBuf {
+        self.locationProviderConfig.to_path(self.mobility_base_path.as_ref().expect("mobility base path not set"))
+    }
 
     pub fn get_precalc_reconnect_path(&self) -> PathBuf {
         self.precalcReconnectPath.to_path(self.mobility_base_path.as_ref().expect("mobility base path not set"))
@@ -1188,7 +1200,7 @@ impl InputMobilityconfig {
     //create a mobility config containing the absolute paths
     pub fn to_mobility_config(&self) -> Mobilityconfig {
         Mobilityconfig {
-            //locationProviderConfig: self.get_location_provider_config_path(),
+            locationProviderConfig: self.get_location_provider_config_path(),
             locationProviderType: self.locationProviderType.clone(),
             reconnectPredictorType: self.reconnectPredictorType.clone(),
             precalcReconnectPath: self.get_precalc_reconnect_path(),
