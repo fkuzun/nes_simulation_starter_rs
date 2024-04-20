@@ -16,10 +16,11 @@ fn main() {
         mobility_configs.push(config);
     }
 
-    let list = MobilityInputConfigList {
-        worker_mobility_configs: mobility_configs
-    };
-
-    list.write_to_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))
+    // let list = MobilityInputConfigList {
+    //     worker_mobility_configs: mobility_configs,
+    //     central_topology_update_list_path: None,
+    // };
+    // 
+    // list.write_to_file(&PathBuf::from(&input_trajectories_directory).join("mobile_config_list.toml"))
 
 }
