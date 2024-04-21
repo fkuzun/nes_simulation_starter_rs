@@ -95,26 +95,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             break;
         }
 
-        let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
+        // let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
+        let experiment_duration = experiment.input_config.get_total_time();
 
         println!("Starting experiment {} of {}", run_number, total_number_of_runs);
         println!("{}", toml::to_string(&experiment.input_config).unwrap());
         println!("performing runs {:?}", runs);
         for attempt in runs {
-        //for attempt in 1..=3 {
+            let experiment_start = SystemTime::now();
+            let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset); 
             //start source input server
-            //let mut source_input_server_process = Command::new("/home/x/rustProjects/nes_simulation_starter_rs/target/release/tcp_input_server")
             let mut source_input_server_process = Command::new(&input_server_path)
                 .arg("127.0.0.1")
                 .arg(experiment.input_config.parameters.source_input_server_port.to_string())
                 .arg(experiment.num_buffers.to_string())
                 .arg(experiment.input_config.default_source_input.tuples_per_buffer.to_string())
                 .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
+                .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string())
                 .spawn()?;
 
-            //std::thread::sleep(Duration::from_secs(5));
 
-            let experiment_start = SystemTime::now();
+            let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);
             let now: DateTime<Local> = Local::now();
             println!("{}: Starting attempt {}", now, attempt);
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
@@ -123,7 +124,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // create rest topology updater
                 let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
                     experiment.central_topology_updates.clone(), 
-                    experiment_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
+                    reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
                     Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap());
                 //todo: check if we need to join this thread
                 let rest_topology_updater_thread = rest_topology_updater.start();
@@ -141,7 +142,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut file = File::create(&file_path).unwrap();
                 let mut file = Arc::new(Mutex::new(file));
                 let query_string = experiment.input_config.parameters.query_strings.clone();
-                std::thread::sleep(Duration::from_secs(5));
+                std::thread::sleep(Duration::from_secs(10));
 
                 // Use the runtime
                 rt.block_on(async {
@@ -154,8 +155,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if let Ok(true) = deployed {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;
-                            let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
+                            // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
                             // let timeout_duration = experiment_duration + Duration::from_secs(60);
+                            let timeout_duration = experiment_duration;
                             let accept_result = timeout(timeout_duration, listener.accept()).await;
 
                             match accept_result {

@@ -112,38 +112,13 @@ impl MobileDeviceQuadrants {
             quadrant_map
         }
     }
-
-    pub fn get_update_vector(mut self, length: usize, interval: Duration, start_offset: Duration) -> Vec<TopologyUpdate> {
+    pub fn get_update_vector(mut self, runtime: Duration, interval: Duration) -> Vec<TopologyUpdate> {
         let mut updates = vec![];
-
+    
         let mut timestamp = Duration::new(0, 0);
-        let mut initial_events = vec![];
-        //insert initial reconnects
-        for (quadrant_id, devices) in self.quadrant_map.iter() {
-            for device in devices {
-                initial_events.push(
-                    ISQPEvent {
-                        parent_id: 1,
-                        child_id: device.device_id,
-                        action: crate::rest_node_relocation::ISQPEventAction::remove,
-                    });
-                initial_events.push(
-                    ISQPEvent {
-                        parent_id: *quadrant_id,
-                        child_id: device.device_id,
-                        action: crate::rest_node_relocation::ISQPEventAction::add,
-                    }
-                );
-            }
-        }
-        updates.push(TopologyUpdate {
-            timestamp,
-            events: initial_events,
-        });
-        timestamp += start_offset;
-
+    
         //insert reconnects
-        for _ in 0..length {
+        while timestamp < runtime {
             updates.push(TopologyUpdate {
                 timestamp,
                 events: self.rotate_devices(),
@@ -152,6 +127,46 @@ impl MobileDeviceQuadrants {
         }
         updates
     }
+
+    // pub fn get_update_vector(mut self, runtime: Duration, interval: Duration, start_offset: Duration) -> Vec<TopologyUpdate> {
+    //     let mut updates = vec![];
+    // 
+    //     let mut timestamp = Duration::new(0, 0);
+    //     let mut initial_events = vec![];
+    //     //insert initial reconnects
+    //     for (quadrant_id, devices) in self.quadrant_map.iter() {
+    //         for device in devices {
+    //             initial_events.push(
+    //                 ISQPEvent {
+    //                     parent_id: 1,
+    //                     child_id: device.device_id,
+    //                     action: crate::rest_node_relocation::ISQPEventAction::remove,
+    //                 });
+    //             initial_events.push(
+    //                 ISQPEvent {
+    //                     parent_id: *quadrant_id,
+    //                     child_id: device.device_id,
+    //                     action: crate::rest_node_relocation::ISQPEventAction::add,
+    //                 }
+    //             );
+    //         }
+    //     }
+    //     updates.push(TopologyUpdate {
+    //         timestamp,
+    //         events: initial_events,
+    //     });
+    //     timestamp += start_offset;
+    // 
+    //     //insert reconnects
+    //     while timestamp < runtime {
+    //         updates.push(TopologyUpdate {
+    //             timestamp,
+    //             events: self.rotate_devices(),
+    //         });
+    //         timestamp += interval;
+    //     }
+    //     updates
+    // }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -175,6 +190,7 @@ struct testContainer {
 
 #[cfg(test)]
 mod tests {
+    use std::time::SystemTime;
     use crate::MobileDeviceQuadrants::{test, testContainer};
 
     #[test]
@@ -204,8 +220,17 @@ mod tests {
         let mut mdq = super::MobileDeviceQuadrants::populate(4, 3, 1, 100);
         let json = serde_json::to_string_pretty(&mdq).unwrap();
         println!("{}", json);
-        let isqp_events = mdq.get_update_vector(3, std::time::Duration::new(2, 0));
+        let isqp_events = mdq.get_update_vector(std::time::Duration::new(6, 0), std::time::Duration::new(2, 0));
         let json = serde_json::to_string_pretty(&isqp_events).unwrap();
         println!("{}", json);
+    }
+
+    #[test]
+    fn test_time() {
+        let now = SystemTime::now();
+        let epoch_now = now.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+        println!("{:?}", epoch_now);
+        println!("{:?}", now);
+        
     }
 }

@@ -4,6 +4,7 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::env;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use chrono::Duration;
 use tokio::time::Instant;
 
 fn main() -> std::io::Result<()> {
@@ -18,6 +19,7 @@ fn main() -> std::io::Result<()> {
     let num_buffers = args[3].parse::<usize>().expect("Invalid number of buffers");
     let buffer_size = args[4].parse::<usize>().expect("Invalid buffer size");
     let gathering_interval = args[5].parse::<u64>().expect("Invalid gathering interval");
+    let deadline = std::time::Duration::from_millis(args[5].parse::<u64>().expect("Invalid deadline"));
 
     // Create a TCP listener bound to a specific address and port
     let listener = match TcpListener::bind((hostname, port)) {
@@ -27,7 +29,7 @@ fn main() -> std::io::Result<()> {
             std::process::exit(1);
         }
     };
-    let deadline = Instant::now() + std::time::Duration::from_secs(30);
+    //let deadline = Instant::now() + std::time::Duration::from_secs(30);
      
     println!("Server listening on port {}...", port);
 
@@ -55,10 +57,12 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration, deadline: Instant) -> std::io::Result<()> {
+fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration, deadline: std::time::Duration) -> std::io::Result<()> {
     println!("Starting tcp writer thread");
     //sleep if deadline is not reached
-    if let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+    //if let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+    if deadline > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
+        let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         println!("Deadline not reached, sleeping for {:?}", remaining);
         std::thread::sleep(remaining);
     }

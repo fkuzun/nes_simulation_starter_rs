@@ -367,15 +367,22 @@ impl NesExecutablePaths {
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
+
 pub struct Parameters {
     pub enable_query_reconfiguration: bool,
     pub enable_proactive_deployment: bool,
     pub speedup_factor: f64,
     //pub amount_of_reconnects: Option<u64>,
     #[serde_as(as = "DurationSeconds<u64>")]
-    pub runtime: Duration,
+    pub deployment_time_offset: Duration,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub warmup: Duration,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub reconnect_runtime: Duration,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub cooldown_time: Duration,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub post_cooldown_time: Duration,
     pub reconnect_input_type: ReconnectPredictorType,
     pub source_input_server_port: u16,
     pub query_strings: Vec<String>,
@@ -558,8 +565,9 @@ impl ExperimentSetup {
 
 
         self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
+        wait_for_topology(Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
-        sleep(Duration::from_secs(2));
+        //sleep(Duration::from_secs(2));
 
         Ok(())
     }
@@ -667,9 +675,16 @@ impl InputConfig {
     //         let config: MobilityInputConfigList = toml::from_str(&*read_to_string(&path)?)?;
     //         Ok(config)
     //     } else {
-    //         
+    //
     //     }
     // }
+    
+    pub fn get_data_production_time(&self) -> Duration {
+        self.parameters.warmup + self.parameters.reconnect_runtime + self.parameters.cooldown_time
+    }
+    pub fn get_total_time(&self) -> Duration {
+        self.parameters.deployment_time_offset + self.parameters.warmup + self.parameters.reconnect_runtime + self.parameters.cooldown_time + self.parameters.post_cooldown_time
+    }
     fn generate_output_config(&self, mut generated_folder: &Path) -> Result<ExperimentSetup, Box<dyn Error>> {
         println!("generating output config");
         // let input_trajectories_directory = &self.paths.mobile_trajectories_directory;
@@ -771,7 +786,7 @@ impl InputConfig {
         println!("generating fixed worker configs");
         let mut next_free_port = 5000;
         let mut fixed_config_paths = vec![];
-        let num_buffers = self.parameters.runtime.as_millis() / self.default_source_input.gathering_interval.as_millis();
+        let num_buffers = self.get_data_production_time().as_millis() / self.default_source_input.gathering_interval.as_millis();
         let mut total_number_of_tuples_to_ingest = 0;
         let mut max_fixed_id = 0;
         for (input_id, location) in &topology.nodes {
@@ -808,7 +823,7 @@ impl InputConfig {
         //let mobility_input_config = MobilityInputConfigList::read_input_from_file(&self.paths.get_mobility_config_list_path())?;
         let mobility_input_config_path_option = &self.paths.get_mobility_config_list_path();
         //let mut input_id = max_fixed_id + 1;
-        
+
         let (mut input_id, mobility_input_config) = if let Some(path) = mobility_input_config_path_option {
             let mobility_input_config = MobilityInputConfigList::read_input_from_file(&path)?;
             (max_fixed_id + 1, mobility_input_config)
@@ -817,7 +832,7 @@ impl InputConfig {
             (quaconf.mobile_start_id, quaconf.get_config_list())
         };
 
-        
+
         let mut generated_mobility_configs = vec![];
         let mut central_topology_update_list = rest_node_relocation::TopologyUpdateList::new();
 
@@ -858,7 +873,7 @@ impl InputConfig {
                 if !point.offset.is_zero() {
                     point.offset = point.offset.add(self.parameters.reconnect_start_offset);
                 }
-                if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
+                if (point.offset > self.parameters.reconnect_runtime) {
                     println!("skip waypoint");
                     break;
                 }
@@ -895,7 +910,7 @@ impl InputConfig {
                         if !reconnect.offset.is_zero() {
                             reconnect.offset = reconnect.offset.add(Duration::from_secs(40));
                         }
-                        if reconnect.offset > self.parameters.runtime.sub(self.parameters.cooldown_time) {
+                        if reconnect.offset > self.parameters.reconnect_runtime {
                             println!("skip reconnect");
                             break;
                         }
@@ -939,7 +954,7 @@ impl InputConfig {
                     //precalcReconnectPath: output_precalculated_reconnects,
                     precalcReconnectPath: RelativePathBuf::from_path("invalid").unwrap(),
                 };
-                
+
             }
             generated_mobility_configs.push(generated_mobility_config.clone());
 
@@ -1010,7 +1025,8 @@ impl InputConfig {
             let q: MobileDeviceQuadrants::MobileDeviceQuadrants = quadrants.to_owned().into();
             // let interval = Duration::from_millis((1000f * self.parameters.speedup_factor) as );
             let interval = Duration::from_secs(1).mul_f64(self.parameters.speedup_factor);
-            q.get_update_vector(self.parameters.amount_of_reconnects.expect("using quadrants but no amount of reconnects is set") as usize, interval, self.parameters.reconnect_start_offset)
+            //let reconnect_time = self.parameters.runtime - self.parameters.cooldown_time;
+            q.get_update_vector(self.parameters.reconnect_runtime, interval)
         } else {
             cvec
         };
