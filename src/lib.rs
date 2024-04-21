@@ -41,6 +41,7 @@ use crate::rest_node_relocation::TopologyUpdate;
 pub mod analyze;
 
 pub mod rest_node_relocation;
+mod MobileDeviceQuadrants;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";

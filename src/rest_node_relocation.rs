@@ -12,6 +12,7 @@ use serde_with::DurationMilliSeconds;
 use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
 use crate::add_edges_from_list;
+use crate::MobileDeviceQuadrants::MobileDeviceQuadrants;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum ISQPEventAction {
