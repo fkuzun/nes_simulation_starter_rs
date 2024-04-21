@@ -371,7 +371,7 @@ pub struct Parameters {
     pub enable_query_reconfiguration: bool,
     pub enable_proactive_deployment: bool,
     pub speedup_factor: f64,
-    pub amout_of_reconnects: Option<u64>,
+    pub amount_of_reconnects: Option<u64>,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub runtime: Duration,
     #[serde_as(as = "DurationSeconds<u64>")]
@@ -379,6 +379,8 @@ pub struct Parameters {
     pub reconnect_input_type: ReconnectPredictorType,
     pub source_input_server_port: u16,
     pub query_strings: Vec<String>,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub reconnect_start_offset: Duration,
     //#[serde_as(as = "HashMap<String, String>")]
 
     pub place_default_sources_on_node_ids: HashMap<String, Vec<String>>,
@@ -447,7 +449,7 @@ pub mod config {
         pub fn get_fixed_topology_nodes_path(&self) -> PathBuf {
             self.fixed_topology_nodes.to_path(self.base_path.as_ref().expect("base path not set"))
         }
-        pub fn get_quadrant_contif(&self) -> Option<QuadrantConfig> {
+        pub fn get_quadrant_config(&self) -> Option<QuadrantConfig> {
             if let MobileTopologyInput::Quadrants(config) = &self.mobile_trajectories_directory {
                 Some(config.clone())
             } else {
@@ -485,7 +487,7 @@ pub struct InputConfig {
     pub parameters: Parameters,
     pub default_source_input: DefaultSourceInput,
     paths: Paths,
-    pub quadrant_config: Option<QuadrantConfig>,
+    //pub quadrant_config: Option<QuadrantConfig>,
 }
 
 pub struct ExperimentSetup {
@@ -811,7 +813,7 @@ impl InputConfig {
             let mobility_input_config = MobilityInputConfigList::read_input_from_file(&path)?;
             (max_fixed_id + 1, mobility_input_config)
         } else {
-            let quaconf = self.paths.get_quadrant_contif().unwrap();
+            let quaconf = self.paths.get_quadrant_config().unwrap();
             (quaconf.mobile_start_id, quaconf.get_config_list())
         };
 
@@ -854,7 +856,7 @@ impl InputConfig {
                 point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
                 //add delay of 15 seconds before starting reconnects
                 if !point.offset.is_zero() {
-                    point.offset = point.offset.add(Duration::from_secs(40));
+                    point.offset = point.offset.add(self.parameters.reconnect_start_offset);
                 }
                 if (point.offset > (self.parameters.runtime.sub(self.parameters.cooldown_time))) {
                     println!("skip waypoint");
@@ -1003,12 +1005,12 @@ impl InputConfig {
             }
         }
 
-        let central_topology_updates = if let Some(quadrants) = &self.quadrant_config {
+        let central_topology_updates = if let Some(quadrants) = &self.paths.get_quadrant_config() {
             //MobileDeviceQuadrants::from(quadrants.to_owned()).get_topology_updates();
             let q: MobileDeviceQuadrants::MobileDeviceQuadrants = quadrants.to_owned().into();
             // let interval = Duration::from_millis((1000f * self.parameters.speedup_factor) as );
             let interval = Duration::from_secs(1).mul_f64(self.parameters.speedup_factor);
-            q.get_update_vector(self.parameters.amout_of_reconnects.expect("using quadrants but no amount of reconnects is set") as usize, interval)
+            q.get_update_vector(self.parameters.amount_of_reconnects.expect("using quadrants but no amount of reconnects is set") as usize, interval, self.parameters.reconnect_start_offset)
         } else {
             cvec
         };

@@ -95,7 +95,7 @@ impl MobileDeviceQuadrants {
     }
 
     fn populate(num_quadrants: usize, devices_per_qudrant: usize, quadrant_start_id: u64, mobile_start_id: u64) -> Self {
-        assert!(quadrant_start_id + (num_quadrants as u64 * devices_per_qudrant as u64) - 1 < mobile_start_id);
+        assert!(quadrant_start_id + num_quadrants as u64 - 1 < mobile_start_id);
         let mut quadrant_map = BTreeMap::new();
         for i in 0..num_quadrants {
             let mut devices = VecDeque::new();
@@ -113,7 +113,7 @@ impl MobileDeviceQuadrants {
         }
     }
 
-    pub fn get_update_vector(mut self, length: usize, interval: Duration) -> Vec<TopologyUpdate> {
+    pub fn get_update_vector(mut self, length: usize, interval: Duration, start_offset: Duration) -> Vec<TopologyUpdate> {
         let mut updates = vec![];
 
         let mut timestamp = Duration::new(0, 0);
@@ -140,7 +140,7 @@ impl MobileDeviceQuadrants {
             timestamp,
             events: initial_events,
         });
-        timestamp += interval;
+        timestamp += start_offset;
 
         //insert reconnects
         for _ in 0..length {
