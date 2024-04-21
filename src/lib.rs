@@ -371,6 +371,7 @@ pub struct Parameters {
     pub enable_query_reconfiguration: bool,
     pub enable_proactive_deployment: bool,
     pub speedup_factor: f64,
+    pub amout_of_reconnects: Option<u64>,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub runtime: Duration,
     #[serde_as(as = "DurationSeconds<u64>")]
@@ -405,6 +406,7 @@ pub enum SourceInputMethod {
 use serde::Deserializer;
 use std::fmt;
 use crate::config::Paths;
+use crate::MobileDeviceQuadrants::QuadrantConfig;
 
 pub fn deserialize_relative_path<'de, D>(deserializer: D) -> Result<RelativePathBuf, D::Error>
     where
@@ -457,6 +459,7 @@ pub struct InputConfig {
     pub parameters: Parameters,
     pub default_source_input: DefaultSourceInput,
     paths: Paths,
+    pub quadrant_config: Option<QuadrantConfig>
 }
 
 pub struct ExperimentSetup {
@@ -936,6 +939,16 @@ impl InputConfig {
                 edges.push((parent, child))
             }
         }
+        
+        let central_topology_updates = if let Some(quadrants) = &self.quadrant_config {
+            //MobileDeviceQuadrants::from(quadrants.to_owned()).get_topology_updates();
+            let q: MobileDeviceQuadrants::MobileDeviceQuadrants = quadrants.to_owned().into();
+            // let interval = Duration::from_millis((1000f * self.parameters.speedup_factor) as );
+            let interval = Duration::from_secs(1).mul_f64(self.parameters.speedup_factor);
+            q.get_update_vector(self.parameters.amout_of_reconnects.expect("using quadrants but no amount of reconnects is set") as usize, interval)
+        } else {
+            cvec
+        };
 
         Ok(ExperimentSetup {
             output_config_directory,
@@ -955,7 +968,8 @@ impl InputConfig {
             input_config: self.clone(),
             num_buffers,
             generated_folder: generated_folder.to_path_buf(),
-            central_topology_updates: cvec,
+            //central_topology_updates: cvec,
+            central_topology_updates
         })
     }
 

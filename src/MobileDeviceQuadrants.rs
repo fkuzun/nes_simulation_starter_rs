@@ -15,6 +15,19 @@ pub struct MobileDeviceQuadrants {
     quadrant_map: BTreeMap<u64, VecDeque<(MobileEntry)>>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct QuadrantConfig {
+    pub num_quadrants: usize,
+    pub devices_per_quadrant: usize,
+    pub quadrant_start_id: u64,
+    pub mobile_start_id: u64,
+}
+
+impl From<QuadrantConfig> for MobileDeviceQuadrants {
+    fn from(config: QuadrantConfig) -> Self {
+        Self::populate(config.num_quadrants, config.devices_per_quadrant, config.quadrant_start_id, config.mobile_start_id)
+    }
+}
 impl MobileDeviceQuadrants {
     fn rotate_devices(&mut self) -> Vec<ISQPEvent> {
         let mut events = vec![];
@@ -76,7 +89,7 @@ impl MobileDeviceQuadrants {
         }
     }
 
-    fn get_update_vector(mut self, length: usize, interval: Duration) -> Vec<TopologyUpdate> {
+    pub fn get_update_vector(mut self, length: usize, interval: Duration) -> Vec<TopologyUpdate> {
         let mut updates = vec![];
 
         let mut timestamp = Duration::new(0, 0);
