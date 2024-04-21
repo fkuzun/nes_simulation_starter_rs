@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
+use crate::{MobilityInputConfigList, ReconnectPredictorType};
 use crate::rest_node_relocation::{ISQPEvent, TopologyUpdate};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,11 +24,34 @@ pub struct QuadrantConfig {
     pub mobile_start_id: u64,
 }
 
+impl QuadrantConfig {
+    pub fn get_config_list(&self) -> MobilityInputConfigList {
+        let mut configs = vec![];
+        for _c in 0..(self.num_quadrants * self.devices_per_quadrant) {
+                configs.push(
+                    crate::InputMobilityconfig {
+                        mobility_base_path: None,
+                        locationProviderConfig: Default::default(),
+                        locationProviderType: "invalid".to_string(),
+                        reconnectPredictorType: ReconnectPredictorType::PRECALCULATED,
+                        precalcReconnectPath: Default::default(),
+                    }
+                );
+        }
+
+        MobilityInputConfigList {
+            worker_mobility_configs: configs,
+            central_topology_update_list_path: None,
+        }
+    }
+}
+
 impl From<QuadrantConfig> for MobileDeviceQuadrants {
     fn from(config: QuadrantConfig) -> Self {
         Self::populate(config.num_quadrants, config.devices_per_quadrant, config.quadrant_start_id, config.mobile_start_id)
     }
 }
+
 impl MobileDeviceQuadrants {
     fn rotate_devices(&mut self) -> Vec<ISQPEvent> {
         let mut events = vec![];
@@ -130,8 +154,39 @@ impl MobileDeviceQuadrants {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum test {
+    A(String),
+    B(u64),
+    C(innerTest),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct innerTest {
+    x: u64,
+    y: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct testContainer {
+    test1: test,
+    test2: test,
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::MobileDeviceQuadrants::{test, testContainer};
+
+    #[test]
+    fn test_toml_enum() {
+        let test = testContainer {
+            test1: test::A("test".to_string()),
+            test2: test::B(1),
+        };
+        let toml = toml::to_string(&test).unwrap();
+        println!("{}", toml);
+    }
+
     #[test]
     fn test_json_output() {
         let mut mdq = super::MobileDeviceQuadrants::populate(4, 3, 1, 100);
