@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
@@ -371,7 +371,7 @@ pub struct Parameters {
     pub enable_query_reconfiguration: bool,
     pub enable_proactive_deployment: bool,
     pub speedup_factor: f64,
-    pub amount_of_reconnects: Option<u64>,
+    //pub amount_of_reconnects: Option<u64>,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub runtime: Duration,
     #[serde_as(as = "DurationSeconds<u64>")]
@@ -1408,7 +1408,7 @@ enum WorkerConfigType {
 }
 
 
-pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<File>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration) -> Result<(), Box<dyn Error>> {
+pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<Mutex<File>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
     //let mut reader = tokio::io::BufReader::new(stream);
     //let mut line = String::new();
@@ -1468,12 +1468,13 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
 
     let tuple_size = 40;
     let valid_bytes = buf.len() - (buf.len() % tuple_size);
+    let mut lock = file.lock().unwrap();
     for i in (0..valid_bytes).step_by(tuple_size) {
         line_count.fetch_add(1, Ordering::SeqCst);
         let tuple = &buf[i..i + tuple_size];
         let tuple_string = get_tuple_string(tuple);
-        file.write_all(tuple_string.as_bytes())?;
-        file.write_all(b"\n")?;
+        lock.write_all(tuple_string.as_bytes())?;
+        lock.write_all(b"\n")?;
     }
 
 

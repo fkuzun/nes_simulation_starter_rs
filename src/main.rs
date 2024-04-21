@@ -7,7 +7,7 @@ use std::net::TcpListener;
 use std::ops::Add;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //check if retrial is complete
     //let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/merged/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
 
-    let runs = 3;
+    let runs = 7;
 
     let simulation_config = SimulationConfig {
         nes_root_dir,
@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // } else {
     //     simulation_config.generate_experiment_configs().expect("Could not create experiment")
     // };
-    let mut experiments = simulation_config.generate_experiment_configs(3).expect("Could not create experiment");
+    let mut experiments = simulation_config.generate_experiment_configs(7).expect("Could not create experiment");
 
     let shutdown_triggered = Arc::new(AtomicBool::new(false));
     let s = Arc::clone(&shutdown_triggered);
@@ -139,7 +139,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // Open the CSV file for writing
                 let file_path = format!("{}_run:{}.csv", &experiment.experiment_output_path.to_str().unwrap(), attempt);
                 let mut file = File::create(&file_path).unwrap();
-                let mut file = Arc::new(file);
+                let mut file = Arc::new(Mutex::new(file));
                 let query_string = experiment.input_config.parameters.query_strings.clone();
                 std::thread::sleep(Duration::from_secs(5));
 
@@ -183,7 +183,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             }
                             // Check if the maximum number of lines has been written
                             if line_count.load(SeqCst) >= desired_line_count as usize {
-                                file.flush().expect("TODO: panic message");
+                                file.lock().unwrap().flush().expect("TODO: panic message");
                                 break;
                             }
                             //check timeout
