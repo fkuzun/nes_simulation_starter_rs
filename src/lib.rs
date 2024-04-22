@@ -105,9 +105,11 @@ pub struct MultiSimulationInputConfig {
     pub enable_proactive_deployment: Vec<bool>,
     pub tuples_per_buffer: Vec<usize>,
     pub speedup_factor: Vec<f64>,
+    placementAmendmentThreadCount: Vec<u16>,
     #[serde_as(as = "Vec<DurationMilliSeconds<u64>>")]
     pub gathering_interval: Vec<Duration>,
     pub default_config: InputConfig,
+    pub analysis_script: Option<RelativePathBuf>,
 }
 
 impl MultiSimulationInputConfig {
@@ -135,6 +137,10 @@ impl MultiSimulationInputConfig {
     pub fn get_speedup_short_name(&self) -> String {
         String::from("speedup")
     }
+    
+    pub fn get_amnenment_threads_short_name(&self) -> String {
+        String::from("amendmentThreads")
+    }
 
     pub fn get_short_name_value_separator(&self) -> String {
         String::from(":")
@@ -160,33 +166,37 @@ impl MultiSimulationInputConfig {
                 for &tuples_per_buffer in &self.tuples_per_buffer {
                     for &gathering_interval in &self.gathering_interval {
                         for &speedup_factor in &self.speedup_factor {
-                            let config = InputConfig {
-                                parameters: Parameters {
-                                    enable_query_reconfiguration,
-                                    enable_proactive_deployment,
-                                    speedup_factor,
-                                    //source_input_server_port,
-                                    ..self.default_config.parameters.clone()
-                                },
-                                default_source_input: DefaultSourceInput {
-                                    tuples_per_buffer,
-                                    gathering_interval,
-                                    ..self.default_config.default_source_input.clone()
-                                },
-                                ..self.default_config.clone()
-                            };
+                            for &placementAmendmentThreadCount in &self.placementAmendmentThreadCount {
+                                let config = InputConfig {
+                                    parameters: Parameters {
+                                        enable_query_reconfiguration,
+                                        enable_proactive_deployment,
+                                        speedup_factor,
+                                        placementAmendmentThreadCount,
+                                        //source_input_server_port,
+                                        ..self.default_config.parameters.clone()
+                                    },
+                                    default_source_input: DefaultSourceInput {
+                                        tuples_per_buffer,
+                                        gathering_interval,
+                                        ..self.default_config.default_source_input.clone()
+                                    },
+                                    ..self.default_config.clone()
+                                };
 
-                            //source_input_server_port += 1;
-                            let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
-                            short_name.push_str(&self.get_short_name_to_short_name_separator());
-                            short_name.push_str(&self.get_short_name_with_value(&self.get_proactive_short_name(), &enable_proactive_deployment.to_string()));
-                            short_name.push_str(&self.get_short_name_to_short_name_separator());
-                            short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
-                            short_name.push_str(&self.get_short_name_to_short_name_separator());
-                            short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
-                            short_name.push_str(&self.get_short_name_to_short_name_separator());
-                            short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
-                            configs.push((short_name, config, (0..number_of_runs).collect()));
+                                //source_input_server_port += 1;
+                                let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
+                                short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                short_name.push_str(&self.get_short_name_with_value(&self.get_proactive_short_name(), &enable_proactive_deployment.to_string()));
+                                short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
+                                short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
+                                short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
+                                short_name.push_str(&self.get_short_name_with_value(&self.get_amnenment_threads_short_name(), &placementAmendmentThreadCount.to_string()));
+                                configs.push((short_name, config, (0..number_of_runs).collect()));
+                            }
                         }
                     }
                 }
@@ -216,6 +226,24 @@ pub struct SimulationConfig {
 }
 
 impl SimulationConfig {
+    //get the absolute path to the analysis script defined in the multisimulation config file
+    pub fn get_analysis_script_path(&self) -> Option<PathBuf> {
+        let multi_conf = MultiSimulationInputConfig::read_input_from_file(&self.input_config_path).expect("could not read multi simulation config file");
+        if let Some(script_path) = &multi_conf.analysis_script {
+            // let mut path = self.input_config_path.clone();
+            // path.to_path_buf();
+            let abs_path = script_path.to_path(self.input_config_path.parent().expect("could not get parent path of input config file"));
+            if abs_path.exists() {
+                Some(abs_path)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+
     // fn get_input_folder_path(&self) -> PathBuf {
     //     let mut path = self.experiment_directory.clone();
     //     path.push(INPUT_FOLDER_SUB_PATH);
@@ -367,7 +395,6 @@ impl NesExecutablePaths {
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
-
 pub struct Parameters {
     pub enable_query_reconfiguration: bool,
     pub enable_proactive_deployment: bool,
@@ -393,6 +420,7 @@ pub struct Parameters {
     pub place_default_sources_on_node_ids: HashMap<String, Vec<String>>,
     pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
+    placementAmendmentThreadCount: u16,
 }
 
 
@@ -441,7 +469,7 @@ pub mod config {
         fixed_topology_nodes: RelativePathBuf,
         //#[serde(deserialize_with = "super::deserialize_relative_path")]
         //mobile_trajectories_directory: RelativePathBuf,
-        mobile_trajectories_directory: MobileTopologyInput
+        mobile_trajectories_directory: MobileTopologyInput,
     }
 
     #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -767,7 +795,8 @@ impl InputConfig {
             logicalSources,
             logLevel: LogLevel::LOG_ERROR,
             optimizer: OptimizerConfiguration {
-                enableIncrementalPlacement: self.parameters.enable_query_reconfiguration
+                enableIncrementalPlacement: self.parameters.enable_query_reconfiguration,
+                placementAmendmentThreadCount: self.parameters.placementAmendmentThreadCount,
             },
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
@@ -840,95 +869,95 @@ impl InputConfig {
         for mut worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
             let generated_mobility_config;
             if let Some(_) = self.paths.get_mobile_trajectories_directory() {
-            //worker_mobility_input_config.mobility_base_path = Some(self.paths.get_mobile_trajectories_directory());
-            worker_mobility_input_config.mobility_base_path = self.paths.get_mobile_trajectories_directory();
-            //let worker_mobility_output_config = worker_mobility_input_config.to_mobility_config();
-            //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
-            //todo: can we remove the cretion of csv source?
-            // let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
-            // let mobile_trajectory_file = worker_mobility_input_config.locationProviderConfig;
-            let mobile_trajectory_file = worker_mobility_input_config.get_location_provider_config_path();
-            //todo: find more elegant solution for this
-            if mobile_trajectory_file.extension().unwrap().to_str().unwrap() != "csv" {
-                continue;
-            }
-
-            println!("reading trajectories from {}", mobile_trajectory_file.to_str().unwrap());
-            let mut rdr = csv::ReaderBuilder::new()
-                .has_headers(false)
-                .from_path(mobile_trajectory_file.as_path()).unwrap();
-            let waypoints: Vec<MobileWorkerWaypoint> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
-
-
-            let csv_name = mobile_trajectory_file.file_name().unwrap();
-            let output_trajectory_path = output_trajectory_directory.join(csv_name);
-            let mut csv_writer = csv::WriterBuilder::new()
-                .has_headers(false)
-                .from_path(&output_trajectory_path).unwrap();
-
-
-            for mut point in waypoints {
-                point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
-                //add delay of 15 seconds before starting reconnects
-                if !point.offset.is_zero() {
-                    point.offset = point.offset.add(self.parameters.reconnect_start_offset);
-                }
-                if (point.offset > self.parameters.reconnect_runtime) {
-                    println!("skip waypoint");
-                    break;
+                //worker_mobility_input_config.mobility_base_path = Some(self.paths.get_mobile_trajectories_directory());
+                worker_mobility_input_config.mobility_base_path = self.paths.get_mobile_trajectories_directory();
+                //let worker_mobility_output_config = worker_mobility_input_config.to_mobility_config();
+                //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
+                //todo: can we remove the cretion of csv source?
+                // let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
+                // let mobile_trajectory_file = worker_mobility_input_config.locationProviderConfig;
+                let mobile_trajectory_file = worker_mobility_input_config.get_location_provider_config_path();
+                //todo: find more elegant solution for this
+                if mobile_trajectory_file.extension().unwrap().to_str().unwrap() != "csv" {
+                    continue;
                 }
 
+                println!("reading trajectories from {}", mobile_trajectory_file.to_str().unwrap());
+                let mut rdr = csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .from_path(mobile_trajectory_file.as_path()).unwrap();
+                let waypoints: Vec<MobileWorkerWaypoint> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
 
-                csv_writer.serialize(point).unwrap();
-            }
 
-            csv_writer.flush().unwrap();
+                let csv_name = mobile_trajectory_file.file_name().unwrap();
+                let output_trajectory_path = output_trajectory_directory.join(csv_name);
+                let mut csv_writer = csv::WriterBuilder::new()
+                    .has_headers(false)
+                    .from_path(&output_trajectory_path).unwrap();
 
-            //let mut previous_parent = None;
-            let mut previous_parent_id = 1;
-            let output_precalculated_reconnects = match worker_mobility_input_config.reconnectPredictorType {
-                ReconnectPredictorType::LIVE => { "none".into() }
-                ReconnectPredictorType::PRECALCULATED => {
-                    // let input_precalculated_reconnects = worker_mobility_input_config.precalcReconnectPath;
-                    let input_precalculated_reconnects = worker_mobility_input_config.get_precalc_reconnect_path();
-                    println!("reading precalculated reconnects from {}", input_precalculated_reconnects.to_str().unwrap());
-                    let mut rdr = csv::ReaderBuilder::new()
-                        .has_headers(false)
-                        .from_path(&input_precalculated_reconnects).unwrap();
-                    let reconnects: Vec<PrecalculatedReconnect> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
 
-                    let csv_name = input_precalculated_reconnects.file_name().unwrap();
-                    let output_precalc_path = output_trajectory_directory.join(csv_name);
-                    let mut csv_writer = csv::WriterBuilder::new()
-                        .has_headers(false)
-                        .from_path(&output_precalc_path).unwrap();
-
-                    for mut reconnect in reconnects {
-                        reconnect.offset = reconnect.offset.mul_f64(self.parameters.speedup_factor);
-                        //add delay of 15 seconds before starting reconnects
-                        //todo: make this a config parameter
-                        if !reconnect.offset.is_zero() {
-                            reconnect.offset = reconnect.offset.add(Duration::from_secs(40));
-                        }
-                        if reconnect.offset > self.parameters.reconnect_runtime {
-                            println!("skip reconnect");
-                            break;
-                        }
-                        // if let Some(previous_parent_id) = previous_parent {
-                        //     central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id)
-                        // } else {
-                        //     central_topology_update_list.add_initial_connect(input_id, reconnect.parent_id);
-                        // }
-                        central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id);
-                        //previous_parent = Some(reconnect.parent_id);
-                        previous_parent_id = reconnect.parent_id;
-                        csv_writer.serialize(reconnect).unwrap();
+                for mut point in waypoints {
+                    point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
+                    //add delay of 15 seconds before starting reconnects
+                    if !point.offset.is_zero() {
+                        point.offset = point.offset.add(self.parameters.reconnect_start_offset);
                     }
-                    csv_writer.flush().unwrap();
-                    // output_precalc_path
-                    PathBuf::from(csv_name)
+                    if (point.offset > self.parameters.reconnect_runtime) {
+                        println!("skip waypoint");
+                        break;
+                    }
+
+
+                    csv_writer.serialize(point).unwrap();
                 }
-            };
+
+                csv_writer.flush().unwrap();
+
+                //let mut previous_parent = None;
+                let mut previous_parent_id = 1;
+                let output_precalculated_reconnects = match worker_mobility_input_config.reconnectPredictorType {
+                    ReconnectPredictorType::LIVE => { "none".into() }
+                    ReconnectPredictorType::PRECALCULATED => {
+                        // let input_precalculated_reconnects = worker_mobility_input_config.precalcReconnectPath;
+                        let input_precalculated_reconnects = worker_mobility_input_config.get_precalc_reconnect_path();
+                        println!("reading precalculated reconnects from {}", input_precalculated_reconnects.to_str().unwrap());
+                        let mut rdr = csv::ReaderBuilder::new()
+                            .has_headers(false)
+                            .from_path(&input_precalculated_reconnects).unwrap();
+                        let reconnects: Vec<PrecalculatedReconnect> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
+
+                        let csv_name = input_precalculated_reconnects.file_name().unwrap();
+                        let output_precalc_path = output_trajectory_directory.join(csv_name);
+                        let mut csv_writer = csv::WriterBuilder::new()
+                            .has_headers(false)
+                            .from_path(&output_precalc_path).unwrap();
+
+                        for mut reconnect in reconnects {
+                            reconnect.offset = reconnect.offset.mul_f64(self.parameters.speedup_factor);
+                            //add delay of 15 seconds before starting reconnects
+                            //todo: make this a config parameter
+                            if !reconnect.offset.is_zero() {
+                                reconnect.offset = reconnect.offset.add(Duration::from_secs(40));
+                            }
+                            if reconnect.offset > self.parameters.reconnect_runtime {
+                                println!("skip reconnect");
+                                break;
+                            }
+                            // if let Some(previous_parent_id) = previous_parent {
+                            //     central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id)
+                            // } else {
+                            //     central_topology_update_list.add_initial_connect(input_id, reconnect.parent_id);
+                            // }
+                            central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id);
+                            //previous_parent = Some(reconnect.parent_id);
+                            previous_parent_id = reconnect.parent_id;
+                            csv_writer.serialize(reconnect).unwrap();
+                        }
+                        csv_writer.flush().unwrap();
+                        // output_precalc_path
+                        PathBuf::from(csv_name)
+                    }
+                };
                 generated_mobility_config = InputMobilityconfig {
                     mobility_base_path: Some(output_trajectory_directory.clone()),
                     //locationProviderConfig: output_trajectory_path,
@@ -941,7 +970,7 @@ impl InputConfig {
                     //precalcReconnectPath: output_precalculated_reconnects,
                     precalcReconnectPath: RelativePathBuf::from_path(output_precalculated_reconnects).unwrap(),
                 };
-        } else {
+            } else {
                 generated_mobility_config = InputMobilityconfig {
                     mobility_base_path: Some(output_trajectory_directory.clone()),
                     //locationProviderConfig: output_trajectory_path,
@@ -954,7 +983,6 @@ impl InputConfig {
                     //precalcReconnectPath: output_precalculated_reconnects,
                     precalcReconnectPath: RelativePathBuf::from_path("invalid").unwrap(),
                 };
-
             }
             generated_mobility_configs.push(generated_mobility_config.clone());
 
@@ -1345,6 +1373,7 @@ struct CoordinatorConfiguration {
 #[derive(Debug, Serialize, Deserialize)]
 struct OptimizerConfiguration {
     enableIncrementalPlacement: bool,
+    placementAmendmentThreadCount: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]

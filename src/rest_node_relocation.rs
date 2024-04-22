@@ -170,10 +170,11 @@ impl REST_topology_updater {
                 continue;
             }
             let update_time = update.timestamp.add(self.start_time);
-            let now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
-            if now < update_time {
+            let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
+            while now < update_time {
                 println!("Waiting for next update, going to sleep");
                 std::thread::sleep(update_time - now);
+                now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             }
             self.send_topology_update(update);
             println!("Sent update at {:?}", update_time);

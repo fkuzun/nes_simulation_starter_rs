@@ -223,9 +223,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
                 tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
                 //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
-                let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
-                if notebook_path.exists() {
+                //let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
+                //if notebook_path.exists() {
+                if let Some(notebook_path) = &simulation_config.get_analysis_script_path() {
                     create_notebook(&PathBuf::from(&file_path), &notebook_path, &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
+                } else {
+                    println!("No analysis script defined")
                 }
                 if (shutdown_triggered.load(Ordering::SeqCst)) {
                     break;
