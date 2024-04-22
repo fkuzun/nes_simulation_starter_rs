@@ -105,6 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let experiment_start = SystemTime::now();
             let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset); 
             //start source input server
+            println!("starting input server");
             let mut source_input_server_process = Command::new(&input_server_path)
                 .arg("127.0.0.1")
                 .arg(experiment.input_config.parameters.source_input_server_port.to_string())
@@ -113,6 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
                 .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string())
                 .spawn()?;
+            println!("input server process id {}", source_input_server_process.id());
 
 
             let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);

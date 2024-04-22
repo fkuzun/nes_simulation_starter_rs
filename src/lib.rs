@@ -565,9 +565,9 @@ impl ExperimentSetup {
 
 
         self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
-        wait_for_topology(Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
+        //wait_for_topology(Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
-        //sleep(Duration::from_secs(2));
+        sleep(Duration::from_secs(7));
 
         Ok(())
     }
@@ -678,7 +678,7 @@ impl InputConfig {
     //
     //     }
     // }
-    
+
     pub fn get_data_production_time(&self) -> Duration {
         self.parameters.warmup + self.parameters.reconnect_runtime + self.parameters.cooldown_time
     }
