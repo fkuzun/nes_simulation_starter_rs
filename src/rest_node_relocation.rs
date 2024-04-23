@@ -113,6 +113,7 @@ impl Default for TopologyUpdateList {
 
 pub struct REST_topology_updater {
     topology_updates: Vec<TopologyUpdate>,
+    initial_updates: Vec<(u64, u64)>,
     start_time: time::Duration,
     interval: time::Duration,
     url: Url,
@@ -120,13 +121,14 @@ pub struct REST_topology_updater {
 }
 
 impl REST_topology_updater {
-    pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, interval: time::Duration, url: Url) -> Self {
+    pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, interval: time::Duration, url: Url, initial_updates: Vec<(u64, u64)>) -> Self {
         Self {
             topology_updates,
             start_time,
             interval,
             url,
             client: reqwest::blocking::Client::new(),
+            initial_updates,
         }
     }
 
@@ -149,26 +151,18 @@ impl REST_topology_updater {
     }
 
     fn perform_initial_reconnect(&self) {
-        let initial_update = self.topology_updates.first().unwrap();
-        let mut edges = vec![];
-        for event in &initial_update.events {
-            if event.action == ISQPEventAction::add {
-                edges.push((
-                    event.parent_id,
-                    event.child_id
-                ));
-            }
-        }
+        //let initial_update = self.topology_updates.first().unwrap();
         let rest_port = self.url.port().unwrap();
-        add_edges_from_list(&rest_port, &edges).expect("Could not add initial edges");
+        println!("Adding initial mobile edges");
+        add_edges_from_list(&rest_port, &self.initial_updates).expect("Could not add initial edges");
     }
 
     fn run(self) {
         println!("Starting central topology updates");
         for update in &self.topology_updates {
-            if (update.timestamp.as_nanos() == 0) {
-                continue;
-            }
+            //if (update.timestamp.as_nanos() == 0) {
+            //    continue;
+            //}
             let update_time = update.timestamp.add(self.start_time);
             let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             while now < update_time {

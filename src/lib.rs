@@ -66,6 +66,7 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
         if parent_id == &1 {
             continue;
         }
+        println!("adding edge from {} to {}", parent_id, child_id);
         let link_request = AddEdgeRequest {
             parent_id: *parent_id,
             child_id: *child_id,
@@ -544,6 +545,7 @@ pub struct ExperimentSetup {
     pub total_number_of_tuples_to_ingest: u64,
     pub num_buffers: u128,
     pub central_topology_updates: Vec<TopologyUpdate>,
+    pub initial_topology_update: Option<Vec<(u64, u64)>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1035,6 +1037,7 @@ impl InputConfig {
         };
 
         let cvec: Vec<TopologyUpdate> = central_topology_update_list.into();
+        //todo: we also need to get the list of initial updates here
         let reconnect_json = serde_json::to_string_pretty(&cvec).unwrap();
         println!("{}", reconnect_json);
 
@@ -1053,15 +1056,16 @@ impl InputConfig {
             }
         }
 
-        let central_topology_updates = if let Some(quadrants) = &self.paths.get_quadrant_config() {
+        let (central_topology_updates, initial_topology_update) = if let Some(quadrants) = &self.paths.get_quadrant_config() {
             //MobileDeviceQuadrants::from(quadrants.to_owned()).get_topology_updates();
             let q: MobileDeviceQuadrants::MobileDeviceQuadrants = quadrants.to_owned().into();
             // let interval = Duration::from_millis((1000f * self.parameters.speedup_factor) as );
             let interval = Duration::from_secs(1).mul_f64(self.parameters.speedup_factor);
             //let reconnect_time = self.parameters.runtime - self.parameters.cooldown_time;
-            q.get_update_vector(self.parameters.reconnect_runtime, interval)
+            let initial_update = q.get_initial_update();
+            (q.get_update_vector(self.parameters.reconnect_runtime, interval), Some(initial_update))
         } else {
-            cvec
+            (cvec, None)
         };
 
         Ok(ExperimentSetup {
@@ -1084,6 +1088,7 @@ impl InputConfig {
             generated_folder: generated_folder.to_path_buf(),
             //central_topology_updates: cvec,
             central_topology_updates,
+            initial_topology_update
         })
     }
 
@@ -1609,6 +1614,16 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
         std::thread::sleep(time::Duration::from_secs(1));
     }
     Err(String::from("Expected node count not reached in topology").into())
+}
+
+pub fn print_topology(restPort: u16) -> std::result::Result<(), Box<dyn Error>> {
+    println!("retrieving topology from, rest port {}", &restPort.to_string());
+        if let Ok(mut reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
+            println!("{}", reply.text()?);
+            //let size = reply.json::<ActualTopology>().unwrap().nodes.len();
+            //println!("topology contains {} nodes", size);
+        }
+    Ok(())
 }
 
 fn create_csv_file(file_path: &str, id: u32, num_rows: usize) -> Result<(), Box<dyn Error>> {

@@ -127,6 +127,16 @@ impl MobileDeviceQuadrants {
         }
         updates
     }
+    
+    pub fn get_initial_update(&self) -> Vec<(u64, u64)> {
+        let mut changes = vec![];
+        for (quadrant_id, devices) in self.quadrant_map.iter() {
+            for device in devices {
+                changes.push((*quadrant_id, device.device_id));
+            }
+        }
+        changes
+    }
 
     // pub fn get_update_vector(mut self, runtime: Duration, interval: Duration, start_offset: Duration) -> Vec<TopologyUpdate> {
     //     let mut updates = vec![];

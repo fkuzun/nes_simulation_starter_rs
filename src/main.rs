@@ -127,9 +127,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
                     experiment.central_topology_updates.clone(), 
                     reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
-                    Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap());
+                    Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
+                    experiment.initial_topology_update.as_ref().unwrap().clone());
                 //todo: check if we need to join this thread
+                print_topology(rest_port).unwrap();
                 let rest_topology_updater_thread = rest_topology_updater.start();
+                print_topology(rest_port).unwrap();
+                //println!("press any key to proceed");
+                //let input: String = text_io::read!("{}\n");
 
                 
                 //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
