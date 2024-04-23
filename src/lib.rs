@@ -689,6 +689,7 @@ impl ExperimentSetup {
             //.arg("--logLevel=LOG_DEBUG")
             .spawn()?);
 
+        std::thread::sleep(time::Duration::from_secs(5));
         //wait until coordinator is online
         wait_for_coordinator(Arc::clone(&shutdown_triggered))?;
         std::thread::sleep(time::Duration::from_secs(1));
@@ -824,8 +825,10 @@ impl InputConfig {
             }
             let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, *input_id);
             let worker_config = FixedWorkerConfig {
-                rpcPort: next_free_port,
-                dataPort: next_free_port + 1,
+                // rpcPort: next_free_port,
+                // dataPort: next_free_port + 1,
+                rpcPort: None,
+                dataPort: None,
                 //numberOfSlots: 6000, //todo: set to 1 to stress test the plan creation
                 //numberOfSlots: number_of_slots,
                 numberOfSlots: number_of_slots.unwrap_or(*topology.slots.get(input_id).unwrap()),
@@ -991,8 +994,10 @@ impl InputConfig {
             //create config
             let worker_config = MobileWorkerConfig {
                 fieldNodeLocationCoordinates: "0,0".into(), //setting this only in case we are using precalculated reconnects
-                rpcPort: next_free_port,
-                dataPort: next_free_port + 1,
+                // rpcPort: next_free_port,
+                // dataPort: next_free_port + 1,
+                rpcPort: None,
+                dataPort: None,
                 workerId: input_id,
                 //numberOfSlots: 1,
                 //numberOfSlots: number_of_slots.unwrap(),
@@ -1266,8 +1271,10 @@ struct PhysicalSource {
 //todo: also add the coordinator port
 #[derive(Debug, Serialize, Deserialize)]
 struct MobileWorkerConfig {
-    rpcPort: u16,
-    dataPort: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rpcPort: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dataPort: Option<u16>,
     workerId: u64,
     numberOfSlots: u16,
     nodeSpatialType: String,
@@ -1282,8 +1289,10 @@ struct MobileWorkerConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FixedWorkerConfig {
-    rpcPort: u16,
-    dataPort: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rpcPort: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dataPort: Option<u16>,
     numberOfSlots: u16,
     nodeSpatialType: String,
     fieldNodeLocationCoordinates: String,

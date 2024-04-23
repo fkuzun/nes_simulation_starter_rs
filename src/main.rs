@@ -250,6 +250,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         if (shutdown_triggered.load(Ordering::SeqCst)) {
             break;
         }
+        let wait_time = 30;
+        println!("Finished experiment sleeping {} seconds before next experiment", wait_time);
+        sleep(Duration::from_secs(wait_time));
     }
     Ok(())
 }
