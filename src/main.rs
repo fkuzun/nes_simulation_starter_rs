@@ -21,24 +21,24 @@ use simulation_runner_lib::*;
 use simulation_runner_lib::analyze::create_notebook;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut command = shell("ps -ef | grep 'tcp_input_server' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
-    command.stdout(Stdio::piped());
+    // let mut command = shell("ps -ef | grep 'tcp_input_server' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
+    // command.stdout(Stdio::piped());
+    // 
+    // let output = command.execute_output().unwrap();
+    // 
+    // println!("{}", String::from_utf8(output.stdout).unwrap());
+    // let mut command = shell("ps -ef | grep 'nesWorker' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
+    // command.stdout(Stdio::piped());
+    // 
+    // let output = command.execute_output().unwrap();
+    // 
+    // println!("{}", String::from_utf8(output.stdout).unwrap());
+    // let mut command = shell("ps -ef | grep 'nesCoordinator' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
+    // command.stdout(Stdio::piped());
 
-    let output = command.execute_output().unwrap();
+    // let output = command.execute_output().unwrap();
 
-    println!("{}", String::from_utf8(output.stdout).unwrap());
-    let mut command = shell("ps -ef | grep 'nesWorker' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
-    command.stdout(Stdio::piped());
-
-    let output = command.execute_output().unwrap();
-
-    println!("{}", String::from_utf8(output.stdout).unwrap());
-    let mut command = shell("ps -ef | grep 'nesCoordinator' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
-    command.stdout(Stdio::piped());
-
-    let output = command.execute_output().unwrap();
-
-    println!("{}", String::from_utf8(output.stdout).unwrap());
+    // println!("{}", String::from_utf8(output.stdout).unwrap());
 
     //todo: read this from file
 
@@ -52,17 +52,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let input_config_path = PathBuf::from(&args[2]);
     let output_directory = PathBuf::from(&args[3]);
     let input_server_path = PathBuf::from(&args[4]);
-    let log_level: LogLevel = if args.len() == 6 {
-        println!("Log level: {}", &args[5]);
-        serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[5])).unwrap_or_else(|e| {
+    let runs: u64 = args[5].parse().unwrap();
+    let log_level: LogLevel = if args.len() == 7 {
+        println!("Log level: {}", &args[6]);
+        serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[6])).unwrap_or_else(|e| {
             eprintln!("Could not parse log level: {}", e);
             LogLevel::LOG_ERROR
         })
     } else {
         LogLevel::LOG_ERROR
     };
-    let run_for_retrial_path = if args.len() == 7 {
-        Some(PathBuf::from(&args[5]))
+    let run_for_retrial_path = if args.len() == 8 {
+        Some(PathBuf::from(&args[7]))
     } else {
         None
     };
@@ -76,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //check if retrial is complete
     //let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/merged/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
 
-    let runs = 7;
+    //let runs = 7;
 
     let simulation_config = SimulationConfig {
         nes_root_dir,
@@ -96,7 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // } else {
     //     simulation_config.generate_experiment_configs().expect("Could not create experiment")
     // };
-    let mut experiments = simulation_config.generate_experiment_configs(7).expect("Could not create experiment");
+    let mut experiments = simulation_config.generate_experiment_configs(runs).expect("Could not create experiment");
 
     let shutdown_triggered = Arc::new(AtomicBool::new(false));
     let s = Arc::clone(&shutdown_triggered);
@@ -151,7 +152,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     experiment.initial_topology_update.as_ref().unwrap().clone());
                 //todo: check if we need to join this thread
                 print_topology(rest_port).unwrap();
-                let rest_topology_updater_thread = rest_topology_updater.start();
+                if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
                 print_topology(rest_port).unwrap();
                 //println!("press any key to proceed");
                 //let input: String = text_io::read!("{}\n");
@@ -265,8 +266,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // }
             } else {
                 //todo: move inside the experiment impl
-                println!("Experiment failed to start");
+                println!("Failed to add all mobile edges");
             }
+        } else {
+            //todo: move inside the experiment impl
+            println!("Experiment failed to start");
+        }
             //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
             source_input_server_process.kill()?;

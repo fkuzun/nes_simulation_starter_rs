@@ -1,5 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::collections::{btree_map, BTreeMap, HashMap};
+use std::error::Error;
 use std::ops::Add;
 use std::time;
 use chrono::Duration;
@@ -142,19 +143,20 @@ impl REST_topology_updater {
     }
 
     // start periodic sending of topology updates
-    pub fn start(self) -> std::thread::JoinHandle<()> {
-        self.perform_initial_reconnect();
+    pub fn start(self) -> Result<std::thread::JoinHandle<()>, Box<dyn Error>> {
+        self.perform_initial_reconnect()?;
         //start new thread
+        Ok(
         std::thread::spawn(|| {
             self.run();
-        })
+        }))
     }
 
-    fn perform_initial_reconnect(&self) {
+    fn perform_initial_reconnect(&self) -> Result<(), Box<dyn Error>> {
         //let initial_update = self.topology_updates.first().unwrap();
         let rest_port = self.url.port().unwrap();
         println!("Adding initial mobile edges");
-        add_edges_from_list(&rest_port, &self.initial_updates).expect("Could not add initial edges");
+        add_edges_from_list(&rest_port, &self.initial_updates)
     }
 
     fn run(self) {
@@ -166,12 +168,12 @@ impl REST_topology_updater {
             let update_time = update.timestamp.add(self.start_time);
             let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             while now < update_time {
-                println!("Waiting for next update, going to sleep");
+                //println!("Waiting for next update, going to sleep");
                 std::thread::sleep(update_time - now);
                 now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             }
             self.send_topology_update(update);
-            println!("Sent update at {:?}", update_time);
+            // println!("Sent update at {:?}", update_time);
         }
     }
 }

@@ -582,11 +582,14 @@ impl ExperimentSetup {
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered), rest_port)?;
         // wait_for_topology(Some(2), Arc::clone(&shutdown_triggered), rest_port)?;
 
+        println!("starting fixed workers");
         self.start_fixed_workers(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
 
+        println!("wait for fixed workers");
         wait_for_topology(Some(self.fixed_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
         //wait_for_topology(Some(self.fixed_worker_processes.len() + 1 + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
+        println!("adding fixed edges");
         self.add_edges(rest_port)?;
 
         //wait for user to press key to start mobile workers
@@ -594,10 +597,13 @@ impl ExperimentSetup {
         // let input: String = text_io::read!("{}\n");
 
 
+        println!("starting mobile workers");
         self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
-        //wait_for_topology(Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
-
+        
+        println!("waiting for mobile workers to be online");
         sleep(Duration::from_secs(7));
+        wait_for_topology(Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
+        println!("mobile workers are online");
 
         Ok(())
     }
