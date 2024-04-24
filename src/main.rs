@@ -6,13 +6,14 @@ use std::io::Write;
 use std::net::TcpListener;
 use std::ops::Add;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local};
+use execute::{Execute, shell};
 use reqwest::Url;
 use tokio::task;
 use tokio::time::timeout;
@@ -20,6 +21,25 @@ use simulation_runner_lib::*;
 use simulation_runner_lib::analyze::create_notebook;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let mut command = shell("ps -ef | grep 'tcp_input_server' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
+    command.stdout(Stdio::piped());
+
+    let output = command.execute_output().unwrap();
+
+    println!("{}", String::from_utf8(output.stdout).unwrap());
+    let mut command = shell("ps -ef | grep 'nesWorker' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
+    command.stdout(Stdio::piped());
+
+    let output = command.execute_output().unwrap();
+
+    println!("{}", String::from_utf8(output.stdout).unwrap());
+    let mut command = shell("ps -ef | grep 'nesCoordinator' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
+    command.stdout(Stdio::piped());
+
+    let output = command.execute_output().unwrap();
+
+    println!("{}", String::from_utf8(output.stdout).unwrap());
+
     //todo: read this from file
 
     let args: Vec<String> = env::args().collect();
