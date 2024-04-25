@@ -216,7 +216,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 let current_time = SystemTime::now();
                                 if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
                                     //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
-                                    if elapsed_time > experiment_duration * 2 || line_count.load(SeqCst) >= desired_line_count as usize {
+                                    if elapsed_time > experiment_duration * 2 || line_count.load(SeqCst) >= desired_line_count as usize || shutdown_triggered.load(Ordering::SeqCst) {
                                         println!("flushing file");
                                         file.lock().unwrap().flush().expect("TODO: panic message");
                                         break;

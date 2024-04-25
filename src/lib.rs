@@ -138,7 +138,7 @@ impl MultiSimulationInputConfig {
     pub fn get_speedup_short_name(&self) -> String {
         String::from("speedup")
     }
-    
+
     pub fn get_amnenment_threads_short_name(&self) -> String {
         String::from("amendmentThreads")
     }
@@ -276,7 +276,7 @@ impl SimulationConfig {
         create_folder_with_timestamp(self.output_directory.clone(), self.input_config_path.file_name().unwrap().to_str().unwrap())
     }
 
-    pub fn generate_retrials(&self) -> Result<Vec<(String, InputConfig, Vec<u64>)>, Box<dyn Error>> {
+    pub fn generate_retrials(&self, number_of_runs: u64) -> Result<Vec<(String, InputConfig, Vec<u64>)>, Box<dyn Error>> {
 
         //iterate over all subfolders in retrial path and check for tuple_count files
         let mut setups = vec![];
@@ -288,6 +288,7 @@ impl SimulationConfig {
                 println!("Checking directory");
                 let mut tuple_count_output = None;
                 let mut runs_to_repeat = vec![];
+                let mut succesful_runs = vec![];
                 for entry in fs::read_dir(&path)? {
                     let entry = entry?;
                     let path = entry.path();
@@ -303,21 +304,43 @@ impl SimulationConfig {
                                 let b: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
                                 let c: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap();
                                 tuple_count_output = Some((a, b, c));
-                                if let Some((_, 0, _)) | None = tuple_count_output {
-                                    runs_to_repeat.push(captures[1].parse().unwrap());
+                                // if let Some((_, actual, expected)) | None = tuple_count_output {
+                                //     if actual != expected {
+                                //         runs_to_repeat.push(captures[1].parse().unwrap());
+                                //     }
+                                // }
+                                match tuple_count_output {
+                                    None => {
+                                        //runs_to_repeat.push(captures[1].parse().unwrap());
+                                    }
+                                    Some((_, actual, expected)) => {
+                                        // if actual != expected {
+                                        //     runs_to_repeat.push(captures[1].parse().unwrap());
+                                        // }
+                                        if actual == expected {
+                                            succesful_runs.push(captures[1].parse().unwrap());
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                for run in 0..number_of_runs {
+                    if !succesful_runs.contains(&run) {
+                        runs_to_repeat.push(run);
+                    }
+                }
+                
                 if !runs_to_repeat.is_empty() {
                     //if let Some((_, 0, _)) | None = tuple_count_output {
                     let config_path = path.join("input_config_copy.toml");
 
                     println!("Adding config");
-                    let input_config = read_to_string(config_path).expect("Could not read config file");
+                    let input_config = read_to_string(&config_path).expect("Could not read config file");
                     println!("{:?}", input_config);
-                    let input_config: InputConfig = toml::from_str(&*input_config).expect("could not parse config file");
+                    let mut input_config: InputConfig = toml::from_str(&*input_config).expect("could not parse config file");
+                    input_config.paths.set_base_path(path);
                     setups.push((entry.file_name().to_str().unwrap().to_string(), input_config, runs_to_repeat));
                 }
             }
@@ -342,7 +365,7 @@ impl SimulationConfig {
             println!("rerun");
             let folder_prefix = self.run_for_retrial_path.as_ref().unwrap().file_name().unwrap().to_str().unwrap();
             let generated_main_folder = create_folder_with_timestamp(self.output_directory.clone(), folder_prefix);
-            (generated_main_folder, self.generate_retrials()?)
+            (generated_main_folder, self.generate_retrials(number_of_runs)?)
         } else {
             println!("generate new run");
             let generated_main_folder = self.create_generated_folder();
@@ -353,7 +376,7 @@ impl SimulationConfig {
         //let input_config_list = multi_simulation_config.generate_input_configs();
         println!("writing setups");
         let mut setups = vec![];
-        for (short_name, input_config, runs) in input_config_list {
+        for (short_name, mut input_config, runs) in input_config_list {
             let generated_folder = generated_main_folder.join(short_name);
             fs::create_dir_all(&generated_folder)?;
             let input_config_copy_path = generated_folder.join("input_config_copy.toml");
@@ -362,6 +385,9 @@ impl SimulationConfig {
             println!("{}", &toml_string);
             file.write_all(toml_string.as_bytes())?;
 
+            // let mut config_path = generated_folder.clone();
+            // config_path.push("config/trajectory");
+            // input_config.paths.set_base_path(config_path);
             setups.push((input_config.generate_output_config(&generated_folder)?, runs));
         }
         Ok(setups)
@@ -485,6 +511,10 @@ pub mod config {
         pub fn get_fixed_topology_nodes_path(&self) -> PathBuf {
             self.fixed_topology_nodes.to_path(self.base_path.as_ref().expect("base path not set"))
         }
+        
+        pub fn get_fixed_topology_nodes_path_relative(&self) -> PathBuf {
+            self.fixed_topology_nodes.to_path(".")
+        }
         pub fn get_quadrant_config(&self) -> Option<QuadrantConfig> {
             if let MobileTopologyInput::Quadrants(config) = &self.mobile_trajectories_directory {
                 Some(config.clone())
@@ -599,7 +629,7 @@ impl ExperimentSetup {
 
         println!("starting mobile workers");
         self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
-        
+
         println!("waiting for mobile workers to be online");
         sleep(Duration::from_secs(7));
         wait_for_topology(Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
@@ -734,6 +764,7 @@ impl InputConfig {
         let output_worker_config_directory = output_config_directory.join("worker_config");
         fs::create_dir_all(&output_worker_config_directory).expect("Failed to create folder");
         let output_coordinator_config_path = output_config_directory.join("coordinator_config.yaml");
+        let output_topology_path = generated_folder.join(self.paths.get_fixed_topology_nodes_path_relative());
         //let sink_output_path = generated_folder.join("out.csv");
         //todo: set port here
         let sink_output_path = generated_folder.join("replace_me.csv");
@@ -814,6 +845,7 @@ impl InputConfig {
         //start fixed workers
         let json_string = std::fs::read_to_string(&self.paths.get_fixed_topology_nodes_path())?;
         let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
+        fs::write(&output_topology_path, json_string)?;
 
 
         let numberOfTuplesToProducePerBuffer = match self.default_source_input.source_input_method {
@@ -1094,7 +1126,7 @@ impl InputConfig {
             generated_folder: generated_folder.to_path_buf(),
             //central_topology_updates: cvec,
             central_topology_updates,
-            initial_topology_update
+            initial_topology_update,
         })
     }
 
@@ -1624,11 +1656,11 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
 
 pub fn print_topology(restPort: u16) -> std::result::Result<(), Box<dyn Error>> {
     println!("retrieving topology from, rest port {}", &restPort.to_string());
-        if let Ok(mut reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
-            println!("{}", reply.text()?);
-            //let size = reply.json::<ActualTopology>().unwrap().nodes.len();
-            //println!("topology contains {} nodes", size);
-        }
+    if let Ok(mut reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
+        println!("{}", reply.text()?);
+        //let size = reply.json::<ActualTopology>().unwrap().nodes.len();
+        //println!("topology contains {} nodes", size);
+    }
     Ok(())
 }
 
