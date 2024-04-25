@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //todo: read this from file
 
     let args: Vec<String> = env::args().collect();
-    if args.len() < 5 || args.len() > 7 {
+    if args.len() < 5 || args.len() > 8 {
         eprintln!("Usage: {} <nes directory> <experiment input config path> <output directory> <tcp input server executable> <log level (optional)>, <experiment path for retrial (optional)>", args[0]);
         std::process::exit(1);
     }
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let output_directory = PathBuf::from(&args[3]);
     let input_server_path = PathBuf::from(&args[4]);
     let runs: u64 = args[5].parse().unwrap();
-    let log_level: LogLevel = if args.len() == 7 {
+    let log_level: LogLevel = if args.len() >= 7 {
         println!("Log level: {}", &args[6]);
         serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[6])).unwrap_or_else(|e| {
             eprintln!("Could not parse log level: {}", e);
@@ -211,19 +211,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     break;
                                 }
                             }
-                            // Check if the maximum number of lines has been written
-                            if line_count.load(SeqCst) >= desired_line_count as usize {
-                                file.lock().unwrap().flush().expect("TODO: panic message");
-                                break;
-                            }
-                            //check timeout
-                            let current_time = SystemTime::now();
-                            if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                                if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
-                                    break;
+                        }
+                            loop {
+                                let current_time = SystemTime::now();
+                                if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                                    //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
+                                    if elapsed_time > experiment_duration * 2 || line_count.load(SeqCst) >= desired_line_count as usize {
+                                        println!("flushing file");
+                                        file.lock().unwrap().flush().expect("TODO: panic message");
+                                        break;
+                                    }
+                                    println!("timeout not reached, waiting for tupels to be written");
+                                    sleep(Duration::from_secs(5));
                                 }
                             }
-                        }
+                        //check timeout
                     }
                 });
                 if line_count.load(SeqCst) < desired_line_count as usize {
