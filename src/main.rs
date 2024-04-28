@@ -2,6 +2,7 @@ use std::env;
 use std::error::Error;
 use std::fmt::format;
 use std::fs::{File, OpenOptions};
+use std::future::Future;
 use std::io::Write;
 use std::net::TcpListener;
 use std::ops::Add;
@@ -179,8 +180,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                     let listener_port = listener.local_addr().unwrap().port();
                     println!("Listening for output tuples on port {}", listener_port);
-                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
-                    if let Ok(true) = deployed {
+                    //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
+                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()});
+                    //if let Ok(true) = deployed {
+                    {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;
                             // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
