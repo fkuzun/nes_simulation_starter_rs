@@ -168,6 +168,10 @@ impl MultiSimulationInputConfig {
                     for &gathering_interval in &self.gathering_interval {
                         for &speedup_factor in &self.speedup_factor {
                             for &placementAmendmentThreadCount in &self.placementAmendmentThreadCount {
+                                if enable_query_reconfiguration && placementAmendmentThreadCount == 1 {
+                                    println!("skipping config with reconfiguration enabled and only one amendment thread");
+                                    continue;
+                                }
                                 let config = InputConfig {
                                     parameters: Parameters {
                                         enable_query_reconfiguration,

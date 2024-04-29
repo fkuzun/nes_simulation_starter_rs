@@ -219,7 +219,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 let current_time = SystemTime::now();
                                 if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
                                     //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
-                                    if elapsed_time > experiment_duration * 10 || line_count.load(SeqCst) >= desired_line_count as usize || shutdown_triggered.load(Ordering::SeqCst) {
+                                    if elapsed_time > experiment_duration * 4 || line_count.load(SeqCst) >= desired_line_count as usize || shutdown_triggered.load(Ordering::SeqCst) {
                                         println!("flushing file");
                                         file.lock().unwrap().flush().expect("TODO: panic message");
                                         break;
@@ -253,6 +253,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let tuple_count_path = file_path.clone().add("tuple_count.csv");
                 let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
                 tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
+                let mut actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
+                let reconnect_list_path = file_path.clone().add("reconnects.csv");
+                let mut reconnect_list_file = File::create(PathBuf::from(reconnect_list_path)).unwrap();
+                reconnect_list_file.write_all(actual_reconnect_calls.iter().map(|x| x.as_nanos().to_string()).collect::<Vec<String>>().join("\n").as_bytes()).expect("Error while writing reconnect list to file");
                 //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
                 //let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
                 //if notebook_path.exists() {

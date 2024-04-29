@@ -143,12 +143,12 @@ impl REST_topology_updater {
     }
 
     // start periodic sending of topology updates
-    pub fn start(self) -> Result<std::thread::JoinHandle<()>, Box<dyn Error>> {
+    pub fn start(self) -> Result<std::thread::JoinHandle<Vec<time::Duration>>, Box<dyn Error>> {
         self.perform_initial_reconnect()?;
         //start new thread
         Ok(
         std::thread::spawn(|| {
-            self.run();
+            self.run()
         }))
     }
 
@@ -159,8 +159,9 @@ impl REST_topology_updater {
         add_edges_from_list(&rest_port, &self.initial_updates)
     }
 
-    fn run(self) {
+    fn run(self) -> Vec<time::Duration> {
         println!("Starting central topology updates");
+        let mut actual_calls = vec![];
         for update in &self.topology_updates {
             //if (update.timestamp.as_nanos() == 0) {
             //    continue;
@@ -173,7 +174,9 @@ impl REST_topology_updater {
                 now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             }
             self.send_topology_update(update);
-            println!("Sent update at {:?}", now);
+            actual_calls.push(now);
+            // println!("Sent update at {:?}", now);
         }
+        actual_calls
     }
 }
