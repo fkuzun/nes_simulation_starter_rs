@@ -173,7 +173,7 @@ impl REST_topology_updater {
                 now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             }
             self.send_topology_update(update);
-            println!("Sent update at {:?}", update_time);
+            println!("Sent update at {:?}", now);
         }
     }
 }
