@@ -199,6 +199,7 @@ impl MultiSimulationInputConfig {
                                 short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
                                 short_name.push_str(&self.get_short_name_to_short_name_separator());
                                 short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
+                                short_name.push_str(&self.get_short_name_to_short_name_separator());
                                 short_name.push_str(&self.get_short_name_with_value(&self.get_amnenment_threads_short_name(), &placementAmendmentThreadCount.to_string()));
                                 configs.push((short_name, config, (0..number_of_runs).collect()));
                             }
