@@ -134,12 +134,16 @@ impl REST_topology_updater {
     }
 
     // send a topology update to the REST API
-    fn send_topology_update(&self, update: &TopologyUpdate) {
+    fn send_topology_update(&self, update: &TopologyUpdate) -> Result<(), Box<dyn Error>> {
         let response = self.client.post(self.url.clone())
             .json(&update.events)
-            .send()
-            .unwrap();
-        assert!(response.status().is_success());
+            .send()?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            //return error
+            Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send topology update")))
+        }
     }
 
     // start periodic sending of topology updates
@@ -173,8 +177,11 @@ impl REST_topology_updater {
                 std::thread::sleep(update_time - now);
                 now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             }
-            self.send_topology_update(update);
-            actual_calls.push(now);
+            if let Ok(_) = self.send_topology_update(update) {
+                actual_calls.push(now);
+            } else {
+                return actual_calls
+            }
             // println!("Sent update at {:?}", now);
         }
         actual_calls
