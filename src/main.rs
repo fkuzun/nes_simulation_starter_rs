@@ -170,6 +170,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let file_path = format!("{}_run:{}.csv", &experiment.experiment_output_path.to_str().unwrap(), attempt);
                 let mut file = File::create(&file_path).unwrap();
                 let mut file = Arc::new(Mutex::new(file));
+                let mut completed_threads = AtomicUsize::new(0);
+                let mut completed_threads = Arc::new(completed_threads);
                 let query_string = experiment.input_config.parameters.query_strings.clone();
                 std::thread::sleep(Duration::from_secs(10));
 
@@ -183,6 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
                     let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()});
                     //if let Ok(true) = deployed {
+                    let mut num_spawned = 0;
                     {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;
@@ -201,10 +204,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     let mut experiment_start_clone = experiment_start.clone();
                                     let mut timeout_duration_clone = timeout_duration.clone();
                                     let desired_line_count_copy = desired_line_count;
+                                    let completed_threads_clone = completed_threads.clone();
+                                    num_spawned += 1;
                                     tokio::spawn(async move {
                                         if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone, experiment_start_clone, timeout_duration).await {
                                             eprintln!("Error handling connection: {}", e);
                                         }
+                                        completed_threads_clone.fetch_add(1, Ordering::SeqCst);
                                     });
                                 }
                                 Ok(Err(e)) => {
@@ -219,12 +225,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 let current_time = SystemTime::now();
                                 if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
                                     //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
-                                    if elapsed_time > experiment_duration * 4 || line_count.load(SeqCst) >= desired_line_count as usize || shutdown_triggered.load(Ordering::SeqCst) {
+                                    if (completed_threads.load(SeqCst) == num_spawned && num_spawned > 0) || elapsed_time > experiment_duration * 10 || line_count.load(SeqCst) >= desired_line_count as usize || shutdown_triggered.load(Ordering::SeqCst) {
                                         println!("flushing file");
                                         file.lock().unwrap().flush().expect("TODO: panic message");
                                         break;
                                     }
                                     println!("timeout not reached, waiting for tupels to be written");
+                                    println!("{} threads of {} completed", completed_threads.load(SeqCst), num_spawned);
                                     sleep(Duration::from_secs(5));
                                 }
                             }
