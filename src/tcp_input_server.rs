@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::env;
 use std::sync::mpsc::{channel, Receiver, Sender};
-
+use chrono::{DateTime, Local};
 
 
 fn main() -> std::io::Result<()> {
@@ -32,6 +32,8 @@ fn main() -> std::io::Result<()> {
     //let deadline = Instant::now() + std::time::Duration::from_secs(30);
      
     println!("Server listening on port {}...", port);
+    println!("Deadline for ingestion: {:?}", deadline);
+    println!("Deadline for ingestion: {:?}", DateTime::<Local>::from(deadline));
 
     let gather_interval = std::time::Duration::from_millis(gathering_interval);
 

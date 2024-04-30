@@ -125,7 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("performing runs {:?}", runs);
         for attempt in runs {
             let experiment_start = SystemTime::now();
-            let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset); 
+            let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
             //start source input server
             println!("starting input server");
             let mut source_input_server_process = Command::new(&input_server_path)
@@ -140,6 +140,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
             let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);
+            let start_date_time = DateTime::<Local>::from(experiment_start);
+            let ingestion_start_date_time = DateTime::<Local>::from(ingestion_start);
+            let reconnect_start_date_time = DateTime::<Local>::from(reconnect_start);
+            println!("Experiment started at {}, begin ingesting tuples at {}, start reconnects at {}", start_date_time, ingestion_start_date_time, reconnect_start_date_time);
             let now: DateTime<Local> = Local::now();
             println!("{}: Starting attempt {}", now, attempt);
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
