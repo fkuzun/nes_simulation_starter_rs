@@ -1,27 +1,27 @@
-use std::collections::{hash_map, HashMap};
+use std::collections::{HashMap};
 use std::error::Error;
-use std::fmt::format;
+
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::raw::{time_t, uid_t};
-use std::process::{Child, Command, Stdio};
+
+use std::process::{Child, Command};
 use std::{fs, io, sync, time};
-use std::env::consts::OS;
-use std::ffi::OsStr;
+
+
 use std::fs::{File, read_to_string};
 use std::net::TcpListener;
-use std::ops::{Add, Range, Sub};
-use futures::executor::block_on;
+use std::ops::{Add, Range};
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::path::Path;
-use std::rc::Rc;
+
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-use sync::atomic;
+
 use chrono::Local;
 use nes_tools::launch::Launch;
 use nes_tools::query::SubmitQueryResponse;
@@ -381,7 +381,7 @@ impl SimulationConfig {
         //let input_config_list = multi_simulation_config.generate_input_configs();
         println!("writing setups");
         let mut setups = vec![];
-        for (short_name, mut input_config, runs) in input_config_list {
+        for (short_name, input_config, runs) in input_config_list {
             let generated_folder = generated_main_folder.join(short_name);
             fs::create_dir_all(&generated_folder)?;
             let input_config_copy_path = generated_folder.join("input_config_copy.toml");
@@ -473,9 +473,9 @@ pub enum SourceInputMethod {
 
 
 use serde::Deserializer;
-use std::fmt;
+
 use crate::config::Paths;
-use crate::MobileDeviceQuadrants::QuadrantConfig;
+
 
 pub fn deserialize_relative_path<'de, D>(deserializer: D) -> Result<RelativePathBuf, D::Error>
     where
@@ -538,7 +538,7 @@ pub mod config {
         }
 
         pub fn get_mobility_config_list_path(&self) -> Option<PathBuf> {
-            let mut option = self.get_mobile_trajectories_directory();
+            let option = self.get_mobile_trajectories_directory();
             if let Some(mut path) = option {
                 path.push("mobility_config_list.toml");
                 Some(path)
@@ -681,7 +681,7 @@ impl ExperimentSetup {
             fixedWorker.kill().expect("could not kill worker");
         }
         //kill coordinator
-        match (self.coordinator_process.take()) {
+        match self.coordinator_process.take() {
             None => { println!("coordinator process not found") }
             Some(mut p) => { p.kill()? }
         }
@@ -723,7 +723,7 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>, rest_port: u16, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
+    fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>, _rest_port: u16, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         self.coordinator_process = Some(Command::new(&coordinator_path)
             .arg("--restServerCorsAllowedOrigin=*")
             .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
@@ -757,7 +757,7 @@ impl InputConfig {
     pub fn get_total_time(&self) -> Duration {
         self.parameters.deployment_time_offset + self.parameters.warmup + self.parameters.reconnect_runtime + self.parameters.cooldown_time + self.parameters.post_cooldown_time
     }
-    fn generate_output_config(&self, mut generated_folder: &Path) -> Result<ExperimentSetup, Box<dyn Error>> {
+    fn generate_output_config(&self, generated_folder: &Path) -> Result<ExperimentSetup, Box<dyn Error>> {
         println!("generating output config");
         // let input_trajectories_directory = &self.paths.mobile_trajectories_directory;
         let output_config_directory = generated_folder.join("config");
@@ -950,7 +950,7 @@ impl InputConfig {
                     if !point.offset.is_zero() {
                         point.offset = point.offset.add(self.parameters.reconnect_start_offset);
                     }
-                    if (point.offset > self.parameters.reconnect_runtime) {
+                    if point.offset > self.parameters.reconnect_runtime {
                         println!("skip waypoint");
                         break;
                     }
@@ -1075,7 +1075,7 @@ impl InputConfig {
             mobile_config_paths.push(yaml_path);
             input_id += 1;
             next_free_port += 2;
-            let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
+            let _num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
             //total_number_of_tuples_to_ingest += num_tuples;
         };
 
@@ -1510,7 +1510,7 @@ enum WorkerConfigType {
 }
 
 
-pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Arc<AtomicUsize>, desired_line_count: u64, mut file: Arc<Mutex<File>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration) -> Result<(), Box<dyn Error>> {
+pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<AtomicUsize>, desired_line_count: u64, file: Arc<Mutex<File>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
     //let mut reader = tokio::io::BufReader::new(stream);
     //let mut line = String::new();
@@ -1520,7 +1520,7 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
     loop {
         //while let Ok(bytes_read) = reader.read_line(&mut line).await {
         //exit if shutdown was triggered
-        if (shutdown_triggered.load(SeqCst)) {
+        if shutdown_triggered.load(SeqCst) {
             break;
         }
         let current_time = SystemTime::now();
@@ -1540,7 +1540,7 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, mut line_count: Ar
         // if bytes_read == 0 {
         //     break; // EOF, so end the loop
         // }
-        if let Ok(bytes_read) = stream.try_read_buf(&mut buf) {}
+        if let Ok(_bytes_read) = stream.try_read_buf(&mut buf) {}
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
@@ -1622,7 +1622,7 @@ fn create_folder_with_timestamp(mut path: PathBuf, prefix: &str) -> PathBuf {
 }
 
 fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>> {
-    for i in 0..10 {
+    for _i in 0..10 {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
         }
@@ -1640,11 +1640,11 @@ fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Res
 
 fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc<AtomicBool>, restPort: u16) -> std::result::Result<usize, Box<dyn Error>> {
     println!("waiting for topology, rest port {}", &restPort.to_string());
-    for i in 0..10 {
+    for _i in 0..10 {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
         }
-        if let Ok(mut reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
+        if let Ok(reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
             let size = reply.json::<ActualTopology>().unwrap().nodes.len();
             println!("topology contains {} nodes", size);
             if let Some(expected) = expected_node_count {
@@ -1661,7 +1661,7 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
 
 pub fn print_topology(restPort: u16) -> std::result::Result<(), Box<dyn Error>> {
     println!("retrieving topology from, rest port {}", &restPort.to_string());
-    if let Ok(mut reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
+    if let Ok(reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
         println!("{}", reply.text()?);
         //let size = reply.json::<ActualTopology>().unwrap().nodes.len();
         //println!("topology contains {} nodes", size);
@@ -1671,7 +1671,7 @@ pub fn print_topology(restPort: u16) -> std::result::Result<(), Box<dyn Error>> 
 
 fn create_csv_file(file_path: &str, id: u32, num_rows: usize) -> Result<(), Box<dyn Error>> {
     // Create or open the CSV file
-    let mut file = File::create(file_path)?;
+    let file = File::create(file_path)?;
 
     // Create a CSV writer
     let mut csv_writer = csv::WriterBuilder::new()

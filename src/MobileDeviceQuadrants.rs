@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use crate::{MobilityInputConfigList, ReconnectPredictorType};
@@ -13,7 +13,7 @@ struct MobileEntry {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MobileDeviceQuadrants {
     //quadrant_map: BTreeMap<u64, Vec<(u64, Vec<String>)>>
-    quadrant_map: BTreeMap<u64, VecDeque<(MobileEntry)>>,
+    quadrant_map: BTreeMap<u64, VecDeque<MobileEntry>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

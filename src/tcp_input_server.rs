@@ -4,8 +4,8 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::env;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use chrono::Duration;
-use tokio::time::Instant;
+
+
 
 fn main() -> std::io::Result<()> {
     // Parse environment variables
@@ -39,7 +39,7 @@ fn main() -> std::io::Result<()> {
     // Accept incoming connections and handle them in separate threads
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => {
+            Ok(stream) => {
                 // Spawn a new thread to handle each client connection
                 thread::spawn(move || {
                     if let Err(err) = handle_client(stream, id_count, num_buffers, buffer_size, gather_interval, deadline) {
@@ -60,7 +60,8 @@ fn main() -> std::io::Result<()> {
 fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration, deadline: std::time::Duration) -> std::io::Result<()> {
     println!("Starting tcp writer thread");
     //sleep if deadline is not reached
-    //if let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+    println!("Deadline: {:?}", deadline);
+    println!("Current time: {:?}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap()); 
     if deadline > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
         let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         println!("Deadline not reached, sleeping for {:?}", remaining);
