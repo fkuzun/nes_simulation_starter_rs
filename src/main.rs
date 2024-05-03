@@ -124,29 +124,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("{}", toml::to_string(&experiment.input_config).unwrap());
         println!("performing runs {:?}", runs);
         for attempt in runs {
-            let experiment_start = SystemTime::now();
-            let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
-            //start source input server
-            println!("starting input server");
-            let mut source_input_server_process = Command::new(&input_server_path)
-                .arg("127.0.0.1")
-                .arg(experiment.input_config.parameters.source_input_server_port.to_string())
-                .arg(experiment.num_buffers.to_string())
-                .arg(experiment.input_config.default_source_input.tuples_per_buffer.to_string())
-                .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
-                .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string())
-                .spawn()?;
-            println!("input server process id {}", source_input_server_process.id());
-
-
-            let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);
-            let start_date_time = DateTime::<Local>::from(experiment_start);
-            let ingestion_start_date_time = DateTime::<Local>::from(ingestion_start);
-            let reconnect_start_date_time = DateTime::<Local>::from(reconnect_start);
-            println!("Experiment started at {}, begin ingesting tuples at {}, start reconnects at {}", start_date_time, ingestion_start_date_time, reconnect_start_date_time);
-            let now: DateTime<Local> = Local::now();
-            println!("{}: Starting attempt {}", now, attempt);
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
+                let experiment_start = SystemTime::now();
+                let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
+
+
+                let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);
+                let start_date_time = DateTime::<Local>::from(experiment_start);
+                let ingestion_start_date_time = DateTime::<Local>::from(ingestion_start);
+                let reconnect_start_date_time = DateTime::<Local>::from(reconnect_start);
+                println!("Experiment started at {}, begin ingesting tuples at {}, start reconnects at {}", start_date_time, ingestion_start_date_time, reconnect_start_date_time);
+                let now: DateTime<Local> = Local::now();
+                println!("{}: Starting attempt {}", now, attempt);
+                //start source input server
+                println!("starting input server");
+                let mut source_input_server_process = Command::new(&input_server_path)
+                    .arg("127.0.0.1")
+                    .arg(experiment.input_config.parameters.source_input_server_port.to_string())
+                    .arg(experiment.num_buffers.to_string())
+                    .arg(experiment.input_config.default_source_input.tuples_per_buffer.to_string())
+                    .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
+                    .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string())
+                    .spawn()?;
+                println!("input server process id {}", source_input_server_process.id());
 
                 let rest_port = 8081;
                 // create rest topology updater
@@ -288,13 +288,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 //todo: move inside the experiment impl
                 println!("Failed to add all mobile edges");
             }
+            source_input_server_process.kill()?;
         } else {
             //todo: move inside the experiment impl
             println!("Experiment failed to start");
         }
             //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
-            source_input_server_process.kill()?;
+            //source_input_server_process.kill()?;
         }
         experiment.kill_processes()?;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
