@@ -125,8 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("performing runs {:?}", runs);
         for attempt in runs {
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
-                let (experiment_start, mut source_input_server_process, rest_port, updater_thread_option) = start_input_server_and_updater_thread(&input_server_path, experiment, attempt)?;
-                print_topology(rest_port).unwrap();
+                // let (experiment_start, mut source_input_server_process, rest_port, updater_thread_option) = start_input_server_and_updater_thread(&input_server_path, experiment, attempt)?;
 
 
                 //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
@@ -154,9 +153,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("Listening for output tuples on port {}", listener_port);
                     //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
                     let deployed = task::spawn_blocking(move || { ExperimentSetup::submit_queries(listener_port, query_string).is_ok() });
+                    let attemtp_clone = *attempt;
+                    let experiment_clone = experiment.clone();
+                    let input_server_path_clone = input_server_path.clone();
+                    let join_hanlde = task::spawn_blocking(move || { start_input_server_and_updater_thread(&input_server_path_clone, experiment_clone, attemtp_clone).unwrap() });
+                    //todo: make an if let here
+                    let (experiment_start, mut source_input_server_process, rest_port, updater_thread_option) = join_hanlde.await.unwrap();
                     //if let Ok(true) = deployed {
                     let mut num_spawned = 0;
-                    if let Ok(rest_topology_updater_thread) = updater_thread_option {
+                    if let Some(rest_topology_updater_thread) = updater_thread_option {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;
                             // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
@@ -210,6 +215,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let reconnect_list_path = file_path.clone().add("reconnects.csv");
                         let mut reconnect_list_file = File::create(PathBuf::from(reconnect_list_path)).unwrap();
                         reconnect_list_file.write_all(actual_reconnect_calls.iter().map(|x| x.as_nanos().to_string()).collect::<Vec<String>>().join("\n").as_bytes()).expect("Error while writing reconnect list to file");
+                        source_input_server_process.kill();
                     } else {
                         println!("Failed to add all mobile edges");
                     }
@@ -229,9 +235,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 //get_reconnect_list(8081).unwrap();
                 experiment.kill_processes()?;
-                source_input_server_process.kill()?;
+                // source_input_server_process.kill()?;
                 let current_time = SystemTime::now();
-                println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
+                // println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
+                println!("Finished attempt for experiment {} of {}. attempt: {} ", run_number, total_number_of_runs, attempt);
                 let mut tuple_count_string = format!("{},{},{}\n", attempt, line_count.load(SeqCst), desired_line_count);
                 let tuple_count_path = file_path.clone().add("tuple_count.csv");
                 let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
@@ -244,7 +251,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if (shutdown_triggered.load(Ordering::SeqCst)) {
                     break;
                 }
-                source_input_server_process.kill()?;
+                // source_input_server_process.kill()?;
             } else {
                 //todo: move inside the experiment impl
                 println!("Experiment failed to start");
@@ -263,7 +270,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn start_input_server_and_updater_thread(input_server_path: &PathBuf, experiment: &mut ExperimentSetup, attempt: &mut u64) -> Result<(SystemTime, Child, u16, Result<JoinHandle<Vec<Duration>>, Box<dyn Error>>), Box<dyn Error>> {
+fn start_input_server_and_updater_thread(input_server_path: &PathBuf, experiment: &mut ExperimentSetup, attempt: u64) -> Result<(SystemTime, Child, u16, Option<JoinHandle<Vec<Duration>>>), Box<dyn Error>> {
     let experiment_start = SystemTime::now();
     let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
 
@@ -296,6 +303,6 @@ fn start_input_server_and_updater_thread(input_server_path: &PathBuf, experiment
         experiment.initial_topology_update.as_ref().unwrap().clone());
     //todo: check if we need to join this thread
     print_topology(rest_port).unwrap();
-    let updater_thread_option = rest_topology_updater.start();
+    let updater_thread_option = rest_topology_updater.start().ok();
     Ok((experiment_start, source_input_server_process, rest_port, updater_thread_option))
 }
