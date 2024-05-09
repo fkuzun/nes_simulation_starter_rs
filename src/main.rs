@@ -125,6 +125,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("performing runs {:?}", runs);
         for attempt in runs {
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
+
+                let rest_port = 8081;
+                // create rest topology updater
+                let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
+                    experiment.central_topology_updates.clone(),
+                    Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
+                    experiment.initial_topology_update.as_ref().unwrap().clone());
+                //todo: check if we need to join this thread
+                print_topology(rest_port).unwrap();
+                rest_topology_updater.perform_initial_reconnect();
+                print_topology(rest_port).unwrap();
+
+                let query_string = experiment.input_config.parameters.query_strings.clone();
+                let listener_port = 9997;
+                let deployed = ExperimentSetup::submit_queries(listener_port, query_string).is_ok();
+                
+                
                 let experiment_start = SystemTime::now();
                 let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
 
@@ -148,17 +165,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .spawn()?;
                 println!("input server process id {}", source_input_server_process.id());
 
-                let rest_port = 8081;
-                // create rest topology updater
-                let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
-                    experiment.central_topology_updates.clone(), 
-                    reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
-                    Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
-                    experiment.initial_topology_update.as_ref().unwrap().clone());
-                //todo: check if we need to join this thread
-                print_topology(rest_port).unwrap();
-                if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
-                print_topology(rest_port).unwrap();
+                if let Ok(rest_topology_updater_thread) = rest_topology_updater.start(
+                    reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap()
+                ) {
                 //println!("press any key to proceed");
                 //let input: String = text_io::read!("{}\n");
 
@@ -176,19 +185,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut file = Arc::new(Mutex::new(file));
                 let mut completed_threads = AtomicUsize::new(0);
                 let mut completed_threads = Arc::new(completed_threads);
-                let query_string = experiment.input_config.parameters.query_strings.clone();
                 std::thread::sleep(Duration::from_secs(10));
 
                 // Use the runtime
                 rt.block_on(async {
                     //todo: in the future we need to implement on the nes side parsing of ip and not only the port
-                    //let listener = tokio::net::TcpListener::bind("127.0.0.1:12345").await.unwrap();
-                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-                    let listener_port = listener.local_addr().unwrap().port();
+                    //let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                    let addr = format!("127.0.0.1:{}", listener_port);
+                    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+                    // let listener_port = listener.local_addr().unwrap().port();
                     println!("Listening for output tuples on port {}", listener_port);
-                    //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
-                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()});
-                    //if let Ok(true) = deployed {
+                    // let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()});
                     let mut num_spawned = 0;
                     {
                         while !shutdown_triggered.load(Ordering::SeqCst) {

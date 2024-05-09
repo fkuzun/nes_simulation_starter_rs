@@ -115,17 +115,16 @@ impl Default for TopologyUpdateList {
 pub struct REST_topology_updater {
     topology_updates: Vec<TopologyUpdate>,
     initial_updates: Vec<(u64, u64)>,
-    start_time: time::Duration,
+    // start_time: time::Duration,
     interval: time::Duration,
     url: Url,
     client: reqwest::blocking::Client,
 }
 
 impl REST_topology_updater {
-    pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, interval: time::Duration, url: Url, initial_updates: Vec<(u64, u64)>) -> Self {
+    pub fn new(topology_updates: Vec<TopologyUpdate>, interval: time::Duration, url: Url, initial_updates: Vec<(u64, u64)>) -> Self {
         Self {
             topology_updates,
-            start_time,
             interval,
             url,
             client: reqwest::blocking::Client::new(),
@@ -147,30 +146,30 @@ impl REST_topology_updater {
     }
 
     // start periodic sending of topology updates
-    pub fn start(self) -> Result<std::thread::JoinHandle<Vec<time::Duration>>, Box<dyn Error>> {
-        self.perform_initial_reconnect()?;
+    pub fn start(self, start_time: time::Duration) -> Result<std::thread::JoinHandle<Vec<time::Duration>>, Box<dyn Error>> {
+        // self.perform_initial_reconnect()?;
         //start new thread
         Ok(
-        std::thread::spawn(|| {
-            self.run()
+        std::thread::spawn(move || {
+            self.run(start_time)
         }))
     }
 
-    fn perform_initial_reconnect(&self) -> Result<(), Box<dyn Error>> {
+    pub fn perform_initial_reconnect(&self) -> Result<(), Box<dyn Error>> {
         //let initial_update = self.topology_updates.first().unwrap();
         let rest_port = self.url.port().unwrap();
         println!("Adding initial mobile edges");
         add_edges_from_list(&rest_port, &self.initial_updates)
     }
 
-    fn run(self) -> Vec<time::Duration> {
+    fn run(self, start_time: time::Duration) -> Vec<time::Duration> {
         println!("Starting central topology updates");
         let mut actual_calls = vec![];
         for update in &self.topology_updates {
             //if (update.timestamp.as_nanos() == 0) {
             //    continue;
             //}
-            let update_time = update.timestamp.add(self.start_time);
+            let update_time = update.timestamp.add(start_time);
             let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             while now < update_time {
                 //println!("Waiting for next update, going to sleep");
