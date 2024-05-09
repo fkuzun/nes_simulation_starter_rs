@@ -7,11 +7,11 @@ use std::io::Write;
 use std::net::TcpListener;
 use std::ops::Add;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
-use std::thread::sleep;
+use std::thread::{JoinHandle, sleep};
 use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local};
 use execute::{Execute, shell};
@@ -125,44 +125,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("performing runs {:?}", runs);
         for attempt in runs {
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
-                let experiment_start = SystemTime::now();
-                let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
-
-
-                let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);
-                let start_date_time = DateTime::<Local>::from(experiment_start);
-                let ingestion_start_date_time = DateTime::<Local>::from(ingestion_start);
-                let reconnect_start_date_time = DateTime::<Local>::from(reconnect_start);
-                println!("Experiment started at {}, begin ingesting tuples at {}, start reconnects at {}", start_date_time, ingestion_start_date_time, reconnect_start_date_time);
-                let now: DateTime<Local> = Local::now();
-                println!("{}: Starting attempt {}", now, attempt);
-                //start source input server
-                println!("starting input server");
-                let mut source_input_server_process = Command::new(&input_server_path)
-                    .arg("127.0.0.1")
-                    .arg(experiment.input_config.parameters.source_input_server_port.to_string())
-                    .arg(experiment.num_buffers.to_string())
-                    .arg(experiment.input_config.default_source_input.tuples_per_buffer.to_string())
-                    .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
-                    .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string())
-                    .spawn()?;
-                println!("input server process id {}", source_input_server_process.id());
-
-                let rest_port = 8081;
-                // create rest topology updater
-                let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
-                    experiment.central_topology_updates.clone(), 
-                    reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
-                    Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
-                    experiment.initial_topology_update.as_ref().unwrap().clone());
-                //todo: check if we need to join this thread
+                let (experiment_start, mut source_input_server_process, rest_port, updater_thread_option) = start_input_server_and_updater_thread(&input_server_path, experiment, attempt)?;
                 print_topology(rest_port).unwrap();
-                if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
-                print_topology(rest_port).unwrap();
-                //println!("press any key to proceed");
-                //let input: String = text_io::read!("{}\n");
 
-                
+
                 //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                 let desired_line_count = experiment.total_number_of_tuples_to_ingest;
                 // Bind the TCP listener to the specified address and port
@@ -187,10 +153,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let listener_port = listener.local_addr().unwrap().port();
                     println!("Listening for output tuples on port {}", listener_port);
                     //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
-                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()});
+                    let deployed = task::spawn_blocking(move || { ExperimentSetup::submit_queries(listener_port, query_string).is_ok() });
                     //if let Ok(true) = deployed {
                     let mut num_spawned = 0;
-                    {
+                    if let Ok(rest_topology_updater_thread) = updater_thread_option {
                         while !shutdown_triggered.load(Ordering::SeqCst) {
                             //let timeout_duration = experiment_duration * 2;
                             // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
@@ -225,21 +191,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 }
                             }
                         }
-                            loop {
-                                let current_time = SystemTime::now();
-                                if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
-                                    //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
-                                    if (completed_threads.load(SeqCst) == num_spawned && num_spawned > 0) || elapsed_time > experiment_duration * 10 || line_count.load(SeqCst) >= desired_line_count as usize || shutdown_triggered.load(Ordering::SeqCst) {
-                                        println!("flushing file");
-                                        file.lock().unwrap().flush().expect("TODO: panic message");
-                                        break;
-                                    }
-                                    println!("timeout not reached, waiting for tupels to be written");
-                                    println!("{} threads of {} completed", completed_threads.load(SeqCst), num_spawned);
-                                    sleep(Duration::from_secs(5));
+                        loop {
+                            let current_time = SystemTime::now();
+                            if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
+                                //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
+                                if (completed_threads.load(SeqCst) == num_spawned && num_spawned > 0) || elapsed_time > experiment_duration * 10 || line_count.load(SeqCst) >= desired_line_count as usize || shutdown_triggered.load(Ordering::SeqCst) {
+                                    println!("flushing file");
+                                    file.lock().unwrap().flush().expect("TODO: panic message");
+                                    break;
                                 }
+                                println!("timeout not reached, waiting for tupels to be written");
+                                println!("{} threads of {} completed", completed_threads.load(SeqCst), num_spawned);
+                                sleep(Duration::from_secs(5));
                             }
+                        }
                         //check timeout
+                        let mut actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
+                        let reconnect_list_path = file_path.clone().add("reconnects.csv");
+                        let mut reconnect_list_file = File::create(PathBuf::from(reconnect_list_path)).unwrap();
+                        reconnect_list_file.write_all(actual_reconnect_calls.iter().map(|x| x.as_nanos().to_string()).collect::<Vec<String>>().join("\n").as_bytes()).expect("Error while writing reconnect list to file");
+                    } else {
+                        println!("Failed to add all mobile edges");
                     }
                 });
                 if line_count.load(SeqCst) < desired_line_count as usize {
@@ -264,13 +236,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let tuple_count_path = file_path.clone().add("tuple_count.csv");
                 let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
                 tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
-                let mut actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
-                let reconnect_list_path = file_path.clone().add("reconnects.csv");
-                let mut reconnect_list_file = File::create(PathBuf::from(reconnect_list_path)).unwrap();
-                reconnect_list_file.write_all(actual_reconnect_calls.iter().map(|x| x.as_nanos().to_string()).collect::<Vec<String>>().join("\n").as_bytes()).expect("Error while writing reconnect list to file");
-                //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
-                //let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
-                //if notebook_path.exists() {
                 if let Some(notebook_path) = &simulation_config.get_analysis_script_path() {
                     create_notebook(&PathBuf::from(&file_path), &notebook_path, &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
                 } else {
@@ -279,23 +244,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if (shutdown_triggered.load(Ordering::SeqCst)) {
                     break;
                 }
-                // Check if the maximum number of lines has been written
-                // if line_count.load(SeqCst) >= desired_line_count as usize {
-                //     file.flush().expect("TODO: panic message");
-                //     break;
-                // }
+                source_input_server_process.kill()?;
             } else {
                 //todo: move inside the experiment impl
-                println!("Failed to add all mobile edges");
+                println!("Experiment failed to start");
             }
-            source_input_server_process.kill()?;
-        } else {
-            //todo: move inside the experiment impl
-            println!("Experiment failed to start");
-        }
-            //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
-            //source_input_server_process.kill()?;
+            // source_input_server_process.kill()?;
         }
         experiment.kill_processes()?;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
@@ -306,4 +261,41 @@ fn main() -> Result<(), Box<dyn Error>> {
         sleep(Duration::from_secs(wait_time));
     }
     Ok(())
+}
+
+fn start_input_server_and_updater_thread(input_server_path: &PathBuf, experiment: &mut ExperimentSetup, attempt: &mut u64) -> Result<(SystemTime, Child, u16, Result<JoinHandle<Vec<Duration>>, Box<dyn Error>>), Box<dyn Error>> {
+    let experiment_start = SystemTime::now();
+    let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
+
+
+    let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);
+    let start_date_time = DateTime::<Local>::from(experiment_start);
+    let ingestion_start_date_time = DateTime::<Local>::from(ingestion_start);
+    let reconnect_start_date_time = DateTime::<Local>::from(reconnect_start);
+    println!("Experiment started at {}, begin ingesting tuples at {}, start reconnects at {}", start_date_time, ingestion_start_date_time, reconnect_start_date_time);
+    let now: DateTime<Local> = Local::now();
+    println!("{}: Starting attempt {}", now, attempt);
+    //start source input server
+    println!("starting input server");
+    let mut source_input_server_process = Command::new(&input_server_path)
+        .arg("127.0.0.1")
+        .arg(experiment.input_config.parameters.source_input_server_port.to_string())
+        .arg(experiment.num_buffers.to_string())
+        .arg(experiment.input_config.default_source_input.tuples_per_buffer.to_string())
+        .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
+        .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string())
+        .spawn()?;
+    println!("input server process id {}", source_input_server_process.id());
+
+    let rest_port = 8081;
+    // create rest topology updater
+    let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
+        experiment.central_topology_updates.clone(),
+        reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
+        Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
+        experiment.initial_topology_update.as_ref().unwrap().clone());
+    //todo: check if we need to join this thread
+    print_topology(rest_port).unwrap();
+    let updater_thread_option = rest_topology_updater.start();
+    Ok((experiment_start, source_input_server_process, rest_port, updater_thread_option))
 }
