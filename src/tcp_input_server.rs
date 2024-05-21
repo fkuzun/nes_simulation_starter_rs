@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
      
     println!("Server listening on port {}...", port);
     println!("Deadline for ingestion: {:?}", deadline);
-    println!("Deadline for ingestion: {:?}", DateTime::<Local>::from(deadline));
+    // println!("Deadline for ingestion: {:?}", DateTime::<Local>::from(deadline));
 
     let gather_interval = std::time::Duration::from_millis(gathering_interval);
 
