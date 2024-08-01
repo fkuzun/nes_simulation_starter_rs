@@ -1,8 +1,9 @@
 
 use std::collections::{btree_map, BTreeMap};
 use std::error::Error;
-use std::ops::Add;
+use std::ops::{Add, Sub};
 use std::time;
+use std::time::Duration;
 
 
 use reqwest::{Url};
@@ -15,13 +16,13 @@ use serde_with::DurationMilliSeconds;
 use crate::add_edges_from_list;
 
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum ISQPEventAction {
     add,
     remove,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ISQPEvent {
     #[serde(rename = "parentId")]
     pub parent_id: u64,
@@ -31,19 +32,46 @@ pub struct ISQPEvent {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TopologyUpdate {
     #[serde_as(as = "DurationMilliSeconds<u64>")]
     pub timestamp: time::Duration,
+    #[serde(rename = "predictions")]
+    pub predictions: Vec<ISQPEvent>,
     #[serde(rename = "events")]
     pub events: Vec<ISQPEvent>,
 }
 
-pub struct TopologyUpdateList {
-    pub events: BTreeMap<time::Duration, Vec<ISQPEvent>>,
+pub struct ProactiveISQPEvent {
+    pub predicted: Vec<ISQPEvent>,
+    pub events: Vec<ISQPEvent>,
 }
 
+impl ProactiveISQPEvent {
+    pub fn new() -> Self {
+        Self {
+            predicted: vec![],
+            events: vec![],
+        }
+    }
+}
+pub struct TopologyUpdateList {
+    //pub events: BTreeMap<time::Duration, Vec<ISQPEvent>>,
+    pub events: BTreeMap<time::Duration, ProactiveISQPEvent>,
+}
+
+
 impl TopologyUpdateList {
+
+    pub fn addPredictions(&mut self) {
+        let mut iter = self.events.iter_mut().peekable();
+
+        while let Some((_, current_value)) = iter.next() {
+            if let Some((_, next_value)) = iter.peek() {
+                current_value.predicted = next_value.events.clone();
+            }
+        }
+    }
     pub fn new() -> Self {
         Self {
             events: BTreeMap::new(),
@@ -52,10 +80,14 @@ impl TopologyUpdateList {
     pub fn add(&mut self, timestamp: time::Duration, event: ISQPEvent) {
         match self.events.entry(timestamp) {
             btree_map::Entry::Occupied(e) => {
-                e.into_mut().push(event);
+                e.into_mut().events.push(event);
             }
             btree_map::Entry::Vacant(e) => {
-                e.insert(vec![event]);
+                // e.insert(vec![event]);
+                e.insert(ProactiveISQPEvent {
+                    predicted: vec![],
+                    events: vec![event],
+                });
             }
         }
     }
@@ -63,10 +95,13 @@ impl TopologyUpdateList {
     pub fn add_initial_event(&mut self, event: ISQPEvent) {
         match self.events.entry(time::Duration::new(0, 0)) {
             btree_map::Entry::Occupied(e) => {
-                e.into_mut().push(event);
+                e.into_mut().events.push(event);
             }
             btree_map::Entry::Vacant(e) => {
-                e.insert(vec![event]);
+                e.insert(ProactiveISQPEvent {
+                    predicted: vec![],
+                    events: vec![event],
+                });
             }
         }
     }
@@ -96,10 +131,11 @@ impl TopologyUpdateList {
 impl From<TopologyUpdateList> for Vec<TopologyUpdate> {
     fn from(list: TopologyUpdateList) -> Self {
         let mut updates = vec![];
-        for (timestamp, events) in list.events {
+        for (timestamp, e) in list.events {
             updates.push(TopologyUpdate {
                 timestamp,
-                events,
+                events: e.events,
+                predictions: e.predicted,
             });
         }
         updates
@@ -135,8 +171,10 @@ impl REST_topology_updater {
 
     // send a topology update to the REST API
     fn send_topology_update(&self, update: &TopologyUpdate) -> Result<(), Box<dyn Error>> {
+        println!("{:?}", update);
         let response = self.client.post(self.url.clone())
-            .json(&update.events)
+            //.json(&update.events)
+            .json(&update)
             .send()?;
         if response.status().is_success() {
             Ok(())
@@ -167,10 +205,9 @@ impl REST_topology_updater {
         println!("Starting central topology updates");
         let mut actual_calls = vec![];
         for update in &self.topology_updates {
-            //if (update.timestamp.as_nanos() == 0) {
-            //    continue;
-            //}
-            let update_time = update.timestamp.add(self.start_time);
+            //let update_time = update.timestamp.add(self.start_time);
+            //todo: do not hardcode this
+            let update_time = update.timestamp.add(self.start_time).sub(Duration::new(1, 0));
             let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             while now < update_time {
                 //println!("Waiting for next update, going to sleep");

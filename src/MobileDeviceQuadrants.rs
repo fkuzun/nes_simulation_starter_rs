@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
+use std::ops::Sub;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use crate::{MobilityInputConfigList, ReconnectPredictorType};
@@ -116,13 +117,17 @@ impl MobileDeviceQuadrants {
         let mut updates = vec![];
     
         let mut timestamp = Duration::new(0, 0);
-    
+        //let mut timestamp = Duration::new(0, 0).sub(interval);
+        let mut events = vec![];
         //insert reconnects
-        while timestamp < runtime {
+        while timestamp < runtime + interval {
+            let next_events = self.rotate_devices();
             updates.push(TopologyUpdate {
                 timestamp,
-                events: self.rotate_devices(),
+                events: events.clone(),
+                predictions: next_events.clone()
             });
+            events = next_events;
             timestamp += interval;
         }
         updates

@@ -659,7 +659,7 @@ impl ExperimentSetup {
             };
             execute_query_requests.push(execute_query_request);
         }
-        println!("submitting queries: {:?}", &execute_query_requests);
+        //println!("submitting queries: {:?}", &execute_query_requests);
         let client = reqwest::blocking::Client::new();
         let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-multiple-queries")
             .json(&execute_query_requests).send()?;
