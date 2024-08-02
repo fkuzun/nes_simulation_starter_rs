@@ -49,6 +49,11 @@ const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
 const PORT_RANGE: std::ops::Range<u16> = 7000..8000;
 
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SimulatedReconnects {
+    pub initial_parents: Vec<(u64, u64)>,
+    pub topology_updates: Vec<TopologyUpdate>,
+}
 fn get_available_port(mut range: Range<u16>) -> Option<u16> {
     range.find(|port| port_is_available(*port))
 }
@@ -579,8 +584,8 @@ pub struct ExperimentSetup {
     pub input_config: InputConfig,
     pub total_number_of_tuples_to_ingest: u64,
     pub num_buffers: u128,
-    pub central_topology_updates: Vec<TopologyUpdate>,
-    pub initial_topology_update: Option<Vec<(u64, u64)>>,
+    // pub central_topology_updates: Vec<TopologyUpdate>,
+    // pub initial_topology_update: Option<Vec<(u64, u64)>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1119,17 +1124,17 @@ impl InputConfig {
             }
         }
 
-        let (central_topology_updates, initial_topology_update) = if let Some(quadrants) = &self.paths.get_quadrant_config() {
-            //MobileDeviceQuadrants::from(quadrants.to_owned()).get_topology_updates();
-            let q: MobileDeviceQuadrants::MobileDeviceQuadrants = quadrants.to_owned().into();
-            // let interval = Duration::from_millis((1000f * self.parameters.speedup_factor) as );
-            let interval = Duration::from_secs(1).mul_f64(self.parameters.speedup_factor);
-            //let reconnect_time = self.parameters.runtime - self.parameters.cooldown_time;
-            let initial_update = q.get_initial_update();
-            (q.get_update_vector(self.parameters.reconnect_runtime, interval), Some(initial_update))
-        } else {
-            (cvec, None)
-        };
+        // let (central_topology_updates, initial_topology_update) = if let Some(quadrants) = &self.paths.get_quadrant_config() {
+        //     //MobileDeviceQuadrants::from(quadrants.to_owned()).get_topology_updates();
+        //     let q: MobileDeviceQuadrants::MobileDeviceQuadrants = quadrants.to_owned().into();
+        //     // let interval = Duration::from_millis((1000f * self.parameters.speedup_factor) as );
+        //     let interval = Duration::from_secs(1).mul_f64(self.parameters.speedup_factor);
+        //     //let reconnect_time = self.parameters.runtime - self.parameters.cooldown_time;
+        //     let initial_update = q.get_initial_update();
+        //     (q.get_update_vector(self.parameters.reconnect_runtime, interval), Some(initial_update))
+        // } else {
+        //     (cvec, None)
+        // };
 
         Ok(ExperimentSetup {
             output_config_directory,
@@ -1150,8 +1155,8 @@ impl InputConfig {
             num_buffers,
             generated_folder: generated_folder.to_path_buf(),
             //central_topology_updates: cvec,
-            central_topology_updates,
-            initial_topology_update,
+            // central_topology_updates,
+            // initial_topology_update,
         })
     }
 

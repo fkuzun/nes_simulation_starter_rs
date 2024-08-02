@@ -54,8 +54,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let output_directory = PathBuf::from(&args[3]);
     let input_server_path = PathBuf::from(&args[4]);
     let runs: u64 = args[5].parse().unwrap();
-    let log_level: LogLevel = if args.len() >= 7 {
-        println!("Log level: {}", &args[6]);
+    let simulated_reconnect_paths = &args[6];
+    let log_level: LogLevel = if args.len() >= 8 {
+        println!("Log level: {}", &args[7]);
         serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[6])).unwrap_or_else(|e| {
             eprintln!("Could not parse log level: {}", e);
             LogLevel::LOG_ERROR
@@ -63,11 +64,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         LogLevel::LOG_ERROR
     };
-    let run_for_retrial_path = if args.len() == 8 {
-        Some(PathBuf::from(&args[7]))
+    let run_for_retrial_path = if args.len() == 9 {
+        Some(PathBuf::from(&args[8]))
     } else {
         None
     };
+    
+    let simulated_reconnects: SimulatedReconnects = serde_json::from_str(&std::fs::read_to_string(PathBuf::from(simulated_reconnect_paths)).unwrap()).unwrap();
 
     // let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
@@ -151,10 +154,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let rest_port = 8081;
                 // create rest topology updater
                 let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
-                    experiment.central_topology_updates.clone(), 
+                    // experiment.central_topology_updates.clone(), 
+                    simulated_reconnects.topology_updates.clone(),
                     reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
                     Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
-                    experiment.initial_topology_update.as_ref().unwrap().clone());
+                    // experiment.initial_topology_update.as_ref().unwrap().clone());
+                    simulated_reconnects.initial_parents.clone());
                 //todo: check if we need to join this thread
                 print_topology(rest_port).unwrap();
                 if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
