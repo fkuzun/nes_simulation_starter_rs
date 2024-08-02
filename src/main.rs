@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         None
     };
-    
+
     let simulated_reconnects: SimulatedReconnects = serde_json::from_str(&std::fs::read_to_string(PathBuf::from(simulated_reconnect_paths)).unwrap()).unwrap();
 
     // let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
@@ -154,7 +154,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let rest_port = 8081;
                 // create rest topology updater
                 let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
-                    // experiment.central_topology_updates.clone(), 
+                    // experiment.central_topology_updates.clone(),
                     simulated_reconnects.topology_updates.clone(),
                     reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
                     Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
