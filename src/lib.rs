@@ -930,8 +930,7 @@ impl InputConfig {
             let mobility_input_config = MobilityInputConfigList::read_input_from_file(&path)?;
             (max_fixed_id + 1, mobility_input_config)
         } else {
-            let quaconf = self.paths.get_quadrant_config().unwrap();
-            (quaconf.mobile_start_id, quaconf.get_config_list())
+            panic!("No input config path found")
         };
 
 
@@ -940,111 +939,7 @@ impl InputConfig {
 
         println!("generating mobile worker configs");
         for mut worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
-            let generated_mobility_config;
-            if let Some(_) = self.paths.get_mobile_trajectories_directory() {
-                //worker_mobility_input_config.mobility_base_path = Some(self.paths.get_mobile_trajectories_directory());
-                worker_mobility_input_config.mobility_base_path = self.paths.get_mobile_trajectories_directory();
-                //let worker_mobility_output_config = worker_mobility_input_config.to_mobility_config();
-                //for worker_mobility_input_config in fs::read_dir(input_trajectories_directory)? {
-                //todo: can we remove the cretion of csv source?
-                // let source_csv_path = create_input_source_data(&output_source_input_directory, id.try_into().unwrap(), num_buffers.try_into().unwrap(), self.default_source_input.tuples_per_buffer)?;
-                // let mobile_trajectory_file = worker_mobility_input_config.locationProviderConfig;
-                let mobile_trajectory_file = worker_mobility_input_config.get_location_provider_config_path();
-                //todo: find more elegant solution for this
-                if mobile_trajectory_file.extension().unwrap().to_str().unwrap() != "csv" {
-                    continue;
-                }
-
-                println!("reading trajectories from {}", mobile_trajectory_file.to_str().unwrap());
-                let mut rdr = csv::ReaderBuilder::new()
-                    .has_headers(false)
-                    .from_path(mobile_trajectory_file.as_path()).unwrap();
-                let waypoints: Vec<MobileWorkerWaypoint> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
-
-
-                let csv_name = mobile_trajectory_file.file_name().unwrap();
-                let output_trajectory_path = output_trajectory_directory.join(csv_name);
-                let mut csv_writer = csv::WriterBuilder::new()
-                    .has_headers(false)
-                    .from_path(&output_trajectory_path).unwrap();
-
-
-                for mut point in waypoints {
-                    point.offset = point.offset.mul_f64(self.parameters.speedup_factor);
-                    //add delay of 15 seconds before starting reconnects
-                    if !point.offset.is_zero() {
-                        point.offset = point.offset.add(self.parameters.reconnect_start_offset);
-                    }
-                    if point.offset > self.parameters.reconnect_runtime {
-                        println!("skip waypoint");
-                        break;
-                    }
-
-
-                    csv_writer.serialize(point).unwrap();
-                }
-
-                csv_writer.flush().unwrap();
-
-                //let mut previous_parent = None;
-                let mut previous_parent_id = 1;
-                let output_precalculated_reconnects = match worker_mobility_input_config.reconnectPredictorType {
-                    ReconnectPredictorType::LIVE => { "none".into() }
-                    ReconnectPredictorType::PRECALCULATED => {
-                        // let input_precalculated_reconnects = worker_mobility_input_config.precalcReconnectPath;
-                        let input_precalculated_reconnects = worker_mobility_input_config.get_precalc_reconnect_path();
-                        println!("reading precalculated reconnects from {}", input_precalculated_reconnects.to_str().unwrap());
-                        let mut rdr = csv::ReaderBuilder::new()
-                            .has_headers(false)
-                            .from_path(&input_precalculated_reconnects).unwrap();
-                        let reconnects: Vec<PrecalculatedReconnect> = rdr.deserialize().collect::<Result<_, csv::Error>>().unwrap();
-
-                        let csv_name = input_precalculated_reconnects.file_name().unwrap();
-                        let output_precalc_path = output_trajectory_directory.join(csv_name);
-                        let mut csv_writer = csv::WriterBuilder::new()
-                            .has_headers(false)
-                            .from_path(&output_precalc_path).unwrap();
-
-                        for mut reconnect in reconnects {
-                            reconnect.offset = reconnect.offset.mul_f64(self.parameters.speedup_factor);
-                            //add delay of 15 seconds before starting reconnects
-                            //todo: make this a config parameter
-                            if !reconnect.offset.is_zero() {
-                                reconnect.offset = reconnect.offset.add(Duration::from_secs(40));
-                            }
-                            if reconnect.offset > self.parameters.reconnect_runtime {
-                                println!("skip reconnect");
-                                break;
-                            }
-                            // if let Some(previous_parent_id) = previous_parent {
-                            //     central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id)
-                            // } else {
-                            //     central_topology_update_list.add_initial_connect(input_id, reconnect.parent_id);
-                            // }
-                            central_topology_update_list.add_reconnect(reconnect.offset, input_id, previous_parent_id, reconnect.parent_id);
-                            //previous_parent = Some(reconnect.parent_id);
-                            previous_parent_id = reconnect.parent_id;
-                            csv_writer.serialize(reconnect).unwrap();
-                        }
-                        csv_writer.flush().unwrap();
-                        // output_precalc_path
-                        PathBuf::from(csv_name)
-                    }
-                };
-                generated_mobility_config = InputMobilityconfig {
-                    mobility_base_path: Some(output_trajectory_directory.clone()),
-                    //locationProviderConfig: output_trajectory_path,
-                    locationProviderConfig: RelativePathBuf::from_path(csv_name).unwrap(),
-                    //locationProviderType: "CSV".to_owned(),
-                    locationProviderType: "BASE".to_owned(),
-                    // locationProviderConfig: String::from(output_trajectory_path.to_str()
-                    //     .ok_or("Could not get output trajectory path")?),
-                    reconnectPredictorType: worker_mobility_input_config.reconnectPredictorType,
-                    //precalcReconnectPath: output_precalculated_reconnects,
-                    precalcReconnectPath: RelativePathBuf::from_path(output_precalculated_reconnects).unwrap(),
-                };
-            } else {
-                generated_mobility_config = InputMobilityconfig {
+            let generated_mobility_config = InputMobilityconfig {
                     mobility_base_path: Some(output_trajectory_directory.clone()),
                     //locationProviderConfig: output_trajectory_path,
                     locationProviderConfig: RelativePathBuf::from_path("invalid").unwrap(),
@@ -1056,7 +951,6 @@ impl InputConfig {
                     //precalcReconnectPath: output_precalculated_reconnects,
                     precalcReconnectPath: RelativePathBuf::from_path("invalid").unwrap(),
                 };
-            }
             generated_mobility_configs.push(generated_mobility_config.clone());
 
             let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, input_id);
@@ -1074,23 +968,6 @@ impl InputConfig {
                 numberOfSlots: number_of_slots.unwrap_or(0),
                 nodeSpatialType: "MOBILE_NODE".to_owned(),
                 mobility: generated_mobility_config.to_mobility_config(),
-                // physicalSources: vec![
-                //     PhysicalSource {
-                //         logicalSourceName: "values".to_owned(),
-                //         physicalSourceName: "values".to_owned(),
-                //         Type: PhysicalSourceType::CSV_SOURCE,
-                //         configuration: PhysicalSourceConfiguration {
-                //             //filePath: source_csv_path.to_str().ok_or("could not get source csv path")?.to_string(),
-                //             filePath: self.parameters.source_input_server_port.to_string(),
-                //             skipHeader: false,
-                //             //todo: fix this
-                //             sourceGatheringInterval: time::Duration::from_millis(0), //self.default_source_input.gathering_interval,
-                //             //numberOfTuplesToProducePerBuffer: self.default_source_input.tuples_per_buffer.try_into()?,
-                //             numberOfTuplesToProducePerBuffer,
-                //             //numberOfBuffersToProduce: num_buffers.try_into()?,
-                //         },
-                //     }
-                // ],
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
@@ -1101,7 +978,6 @@ impl InputConfig {
             input_id += 1;
             next_free_port += 2;
             let _num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
-            //total_number_of_tuples_to_ingest += num_tuples;
         };
 
         let cvec: Vec<TopologyUpdate> = central_topology_update_list.into();
@@ -1123,18 +999,6 @@ impl InputConfig {
                 edges.push((parent, child))
             }
         }
-
-        // let (central_topology_updates, initial_topology_update) = if let Some(quadrants) = &self.paths.get_quadrant_config() {
-        //     //MobileDeviceQuadrants::from(quadrants.to_owned()).get_topology_updates();
-        //     let q: MobileDeviceQuadrants::MobileDeviceQuadrants = quadrants.to_owned().into();
-        //     // let interval = Duration::from_millis((1000f * self.parameters.speedup_factor) as );
-        //     let interval = Duration::from_secs(1).mul_f64(self.parameters.speedup_factor);
-        //     //let reconnect_time = self.parameters.runtime - self.parameters.cooldown_time;
-        //     let initial_update = q.get_initial_update();
-        //     (q.get_update_vector(self.parameters.reconnect_runtime, interval), Some(initial_update))
-        // } else {
-        //     (cvec, None)
-        // };
 
         Ok(ExperimentSetup {
             output_config_directory,

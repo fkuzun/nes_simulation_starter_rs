@@ -43,6 +43,10 @@ path = "src/retry_experiments.rs"
 name = "test_toml"
 path = "src/test_toml.rs"
 
+[[bin]]
+name = "simulated_reconnects_to_mobile_configs"
+path = "src/simulataed_reconnects_to_mobile_configs.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
