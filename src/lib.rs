@@ -54,6 +54,33 @@ pub struct SimulatedReconnects {
     pub initial_parents: Vec<(u64, u64)>,
     pub topology_updates: Vec<TopologyUpdate>,
 }
+
+impl SimulatedReconnects {
+    pub fn get_mobility_input_config_list(&self) -> MobilityInputConfigList {
+        let mut mobility_configs = vec![];
+        for initial in &self.initial_parents {
+            let generated_mobility_config = InputMobilityconfig {
+                mobility_base_path: None,
+                //locationProviderConfig: output_trajectory_path,
+                locationProviderConfig: RelativePathBuf::from_path("invalid").unwrap(),
+                //locationProviderType: "CSV".to_owned(),
+                locationProviderType: "BASE".to_owned(),
+                // locationProviderConfig: String::from(output_trajectory_path.to_str()
+                //     .ok_or("Could not get output trajectory path")?),
+                reconnectPredictorType: PRECALCULATED,
+                //precalcReconnectPath: output_precalculated_reconnects,
+                precalcReconnectPath: RelativePathBuf::from_path("invalid").unwrap(),
+            };
+            mobility_configs.push(generated_mobility_config.clone());
+        }
+        MobilityInputConfigList {
+            worker_mobility_configs: mobility_configs,
+            central_topology_update_list_path: None,
+        }
+    }
+}
+
+
 fn get_available_port(mut range: Range<u16>) -> Option<u16> {
     range.find(|port| port_is_available(*port))
 }
@@ -341,7 +368,7 @@ impl SimulationConfig {
                         runs_to_repeat.push(run);
                     }
                 }
-                
+
                 if !runs_to_repeat.is_empty() {
                     //if let Some((_, 0, _)) | None = tuple_count_output {
                     let config_path = path.join("input_config_copy.toml");
@@ -480,11 +507,11 @@ pub enum SourceInputMethod {
 use serde::Deserializer;
 
 use crate::config::Paths;
-
+use crate::ReconnectPredictorType::PRECALCULATED;
 
 pub fn deserialize_relative_path<'de, D>(deserializer: D) -> Result<RelativePathBuf, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     // let s = String::deserialize(deserializer)?;
     // RelativePathBuf::from_str(&s).map_err(serde::de::Error::custom)
@@ -521,7 +548,7 @@ pub mod config {
         pub fn get_fixed_topology_nodes_path(&self) -> PathBuf {
             self.fixed_topology_nodes.to_path(self.base_path.as_ref().expect("base path not set"))
         }
-        
+
         pub fn get_fixed_topology_nodes_path_relative(&self) -> PathBuf {
             self.fixed_topology_nodes.to_path(".")
         }
@@ -584,6 +611,7 @@ pub struct ExperimentSetup {
     pub input_config: InputConfig,
     pub total_number_of_tuples_to_ingest: u64,
     pub num_buffers: u128,
+    pub simulated_reconnects: SimulatedReconnects,
     // pub central_topology_updates: Vec<TopologyUpdate>,
     // pub initial_topology_update: Option<Vec<(u64, u64)>>,
 }
@@ -652,10 +680,10 @@ impl ExperimentSetup {
         // for query_string in query_strings {
         //     Self::submit_query(output_port, query_string)?;
         // }
-        
+
         //create vector of ExecuteQueryRequests
         let mut execute_query_requests = vec![];
-        
+
         //iterate over query strings
         for query_string in query_strings {
             let execute_query_request = ExecuteQueryRequest {
@@ -664,7 +692,6 @@ impl ExperimentSetup {
             };
             execute_query_requests.push(execute_query_request);
         }
-        println!("submitting queries: {:?}", &execute_query_requests);
         let client = reqwest::blocking::Client::new();
         let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-multiple-queries")
             .json(&execute_query_requests).send()?;
@@ -833,35 +860,7 @@ impl InputConfig {
         println!("generating coordinator config");
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
-            //enableIncrementalPlacement: self.parameters.enable_query_reconfiguration,
             enableProactiveDeployment: self.parameters.enable_proactive_deployment,
-            // logicalSources: vec![
-            //     LogicalSource {
-            //         logicalSourceName: "values".to_string(),
-            //         fields: vec![
-            //             LogicalSourceField {
-            //                 name: "id".to_string(),
-            //                 Type: UINT64,
-            //             },
-            //             LogicalSourceField {
-            //                 name: "value".to_string(),
-            //                 Type: UINT64,
-            //             },
-            //             LogicalSourceField {
-            //                 name: "ingestion_timestamp".to_string(),
-            //                 Type: UINT64,
-            //             },
-            //             LogicalSourceField {
-            //                 name: "processing_timestamp".to_string(),
-            //                 Type: UINT64,
-            //             },
-            //             LogicalSourceField {
-            //                 name: "output_timestamp".to_string(),
-            //                 Type: UINT64,
-            //             },
-            //         ],
-            //     }
-            // ],
             logicalSources,
             logLevel: LogLevel::LOG_ERROR,
             optimizer: OptimizerConfiguration {
@@ -926,11 +925,16 @@ impl InputConfig {
         let mobility_input_config_path_option = &self.paths.get_mobility_config_list_path();
         //let mut input_id = max_fixed_id + 1;
 
-        let (mut input_id, mobility_input_config) = if let Some(path) = mobility_input_config_path_option {
-            let mobility_input_config = MobilityInputConfigList::read_input_from_file(&path)?;
-            (max_fixed_id + 1, mobility_input_config)
+        let (mut input_id, mobility_input_config, simulated_reconnects) = if let Some(path) = mobility_input_config_path_option {
+            // let mobility_input_config = MobilityInputConfigList::read_input_from_file(&path)?;
+            // (max_fixed_id + 1, mobility_input_config)
+            println!("trying to create mobility input config from simulated reconnects file");
+            let json_string = std::fs::read_to_string(&path)?;
+            let simulated_reconnects: SimulatedReconnects = serde_json::from_str(json_string.as_str())?;
+            let mobility_input_config = simulated_reconnects.get_mobility_input_config_list();
+            (max_fixed_id + 1, mobility_input_config, simulated_reconnects)
         } else {
-            panic!("No input config path found")
+            panic!("No path set for mobility input config")
         };
 
 
@@ -940,17 +944,17 @@ impl InputConfig {
         println!("generating mobile worker configs");
         for mut worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
             let generated_mobility_config = InputMobilityconfig {
-                    mobility_base_path: Some(output_trajectory_directory.clone()),
-                    //locationProviderConfig: output_trajectory_path,
-                    locationProviderConfig: RelativePathBuf::from_path("invalid").unwrap(),
-                    //locationProviderType: "CSV".to_owned(),
-                    locationProviderType: "BASE".to_owned(),
-                    // locationProviderConfig: String::from(output_trajectory_path.to_str()
-                    //     .ok_or("Could not get output trajectory path")?),
-                    reconnectPredictorType: worker_mobility_input_config.reconnectPredictorType,
-                    //precalcReconnectPath: output_precalculated_reconnects,
-                    precalcReconnectPath: RelativePathBuf::from_path("invalid").unwrap(),
-                };
+                mobility_base_path: Some(output_trajectory_directory.clone()),
+                //locationProviderConfig: output_trajectory_path,
+                locationProviderConfig: RelativePathBuf::from_path("invalid").unwrap(),
+                //locationProviderType: "CSV".to_owned(),
+                locationProviderType: "BASE".to_owned(),
+                // locationProviderConfig: String::from(output_trajectory_path.to_str()
+                //     .ok_or("Could not get output trajectory path")?),
+                reconnectPredictorType: worker_mobility_input_config.reconnectPredictorType,
+                //precalcReconnectPath: output_precalculated_reconnects,
+                precalcReconnectPath: RelativePathBuf::from_path("invalid").unwrap(),
+            };
             generated_mobility_configs.push(generated_mobility_config.clone());
 
             let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, input_id);
@@ -1018,6 +1022,7 @@ impl InputConfig {
             input_config: self.clone(),
             num_buffers,
             generated_folder: generated_folder.to_path_buf(),
+            simulated_reconnects,
             //central_topology_updates: cvec,
             // central_topology_updates,
             // initial_topology_update,
