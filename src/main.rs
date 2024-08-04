@@ -54,9 +54,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let output_directory = PathBuf::from(&args[3]);
     let input_server_path = PathBuf::from(&args[4]);
     let runs: u64 = args[5].parse().unwrap();
-    let simulated_reconnect_paths = &args[6];
-    let log_level: LogLevel = if args.len() >= 8 {
-        println!("Log level: {}", &args[7]);
+    let log_level: LogLevel = if args.len() >= 7 {
+        println!("Log level: {}", &args[6]);
         serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[6])).unwrap_or_else(|e| {
             eprintln!("Could not parse log level: {}", e);
             LogLevel::LOG_ERROR
@@ -64,8 +63,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         LogLevel::LOG_ERROR
     };
-    let run_for_retrial_path = if args.len() == 9 {
-        Some(PathBuf::from(&args[8]))
+    let run_for_retrial_path = if args.len() == 8 {
+        Some(PathBuf::from(&args[7]))
     } else {
         None
     };
