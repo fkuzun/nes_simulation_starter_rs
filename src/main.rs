@@ -1,4 +1,5 @@
-use std::env;
+use std::{env, fs};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::format;
 use std::fs::{File, OpenOptions};
@@ -155,80 +156,90 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
                     // experiment.central_topology_updates.clone(),
                     experiment.simulated_reconnects.topology_updates.clone(),
-                    reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(), 
+                    reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
                     Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
                     // experiment.initial_topology_update.as_ref().unwrap().clone());
                     experiment.simulated_reconnects.initial_parents.clone());
                 //todo: check if we need to join this thread
                 print_topology(rest_port).unwrap();
                 if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
-                print_topology(rest_port).unwrap();
-                //println!("press any key to proceed");
-                //let input: String = text_io::read!("{}\n");
+                    print_topology(rest_port).unwrap();
+                    //println!("press any key to proceed");
+                    //let input: String = text_io::read!("{}\n");
 
-                
-                //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
-                let desired_line_count = experiment.total_number_of_tuples_to_ingest;
-                // Bind the TCP listener to the specified address and port
 
-                let mut line_count = AtomicUsize::new(0); // Counter for the lines written
-                let line_count = Arc::new(line_count);
-                //let  line_count = 0; // Counter for the lines written
-                // Open the CSV file for writing
-                let file_path = format!("{}_run:{}.csv", &experiment.experiment_output_path.to_str().unwrap(), attempt);
-                let mut file = File::create(&file_path).unwrap();
-                let mut file = Arc::new(Mutex::new(file));
-                let mut completed_threads = AtomicUsize::new(0);
-                let mut completed_threads = Arc::new(completed_threads);
-                let query_string = experiment.input_config.parameters.query_strings.clone();
-                std::thread::sleep(Duration::from_secs(10));
+                    //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
+                    let desired_line_count = experiment.total_number_of_tuples_to_ingest;
+                    // Bind the TCP listener to the specified address and port
 
-                // Use the runtime
-                rt.block_on(async {
-                    //todo: in the future we need to implement on the nes side parsing of ip and not only the port
-                    //let listener = tokio::net::TcpListener::bind("127.0.0.1:12345").await.unwrap();
-                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-                    let listener_port = listener.local_addr().unwrap().port();
-                    println!("Listening for output tuples on port {}", listener_port);
-                    //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
-                    let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()});
-                    //if let Ok(true) = deployed {
-                    let mut num_spawned = 0;
-                    {
-                        while !shutdown_triggered.load(Ordering::SeqCst) {
-                            //let timeout_duration = experiment_duration * 2;
-                            // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
-                            // let timeout_duration = experiment_duration + Duration::from_secs(60);
-                            let timeout_duration = experiment_duration;
-                            let accept_result = timeout(timeout_duration, listener.accept()).await;
+                    let mut line_count = AtomicUsize::new(0); // Counter for the lines written
+                    let line_count = Arc::new(line_count);
+                    //let  line_count = 0; // Counter for the lines written
+                    // Open the CSV file for writing
+                    let file_path = format!("{}_run:{}.csv", &experiment.experiment_output_path.to_str().unwrap(), attempt);
+                    let mut file = File::create(&file_path).unwrap();
+                    let mut file = Arc::new(Mutex::new(file));
+                    let mut completed_threads = AtomicUsize::new(0);
+                    let mut completed_threads = Arc::new(completed_threads);
+                    let query_string = experiment.input_config.parameters.query_string.clone();
 
-                            match accept_result {
-                                Ok(Ok((stream, _))) => {
-                                    // Handle the connection
-                                    //tokio::spawn(handle_connection(stream, &mut line_count, desired_line_count, &mut file));
-                                    let mut file_clone = file.clone();
-                                    let mut line_count_clone = line_count.clone();
-                                    let mut shutdown_triggered_clone = shutdown_triggered.clone();
-                                    let mut experiment_start_clone = experiment_start.clone();
-                                    let mut timeout_duration_clone = timeout_duration.clone();
-                                    let desired_line_count_copy = desired_line_count;
-                                    let completed_threads_clone = completed_threads.clone();
-                                    num_spawned += 1;
-                                    tokio::spawn(async move {
-                                        if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone, experiment_start_clone, timeout_duration).await {
-                                            eprintln!("Error handling connection: {}", e);
-                                        }
-                                        completed_threads_clone.fetch_add(1, Ordering::SeqCst);
-                                    });
-                                }
-                                Ok(Err(e)) => {
-                                    eprintln!("Error accepting connection: {}", e);
-                                }
-                                Err(_) => {
-                                    break;
+                    let place_default_sources_on_node_ids = fs::read_to_string(&experiment.input_config.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
+                    let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
+                    let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
+                    let mut query_strings = vec![];
+                    for (_, source_ids) in place_default_sources_on_node_ids.iter() {
+                        for id in source_ids {
+                            query_strings.push(query_string.replace("{INPUT}", &id.to_string()));
+                        }
+                    }
+                    std::thread::sleep(Duration::from_secs(10));
+
+                    // Use the runtime
+                    rt.block_on(async {
+                        //todo: in the future we need to implement on the nes side parsing of ip and not only the port
+                        //let listener = tokio::net::TcpListener::bind("127.0.0.1:12345").await.unwrap();
+                        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                        let listener_port = listener.local_addr().unwrap().port();
+                        println!("Listening for output tuples on port {}", listener_port);
+                        //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
+                        let deployed = task::spawn_blocking(move || { ExperimentSetup::submit_queries(listener_port, query_strings).is_ok() });
+                        //if let Ok(true) = deployed {
+                        let mut num_spawned = 0;
+                        {
+                            while !shutdown_triggered.load(Ordering::SeqCst) {
+                                //let timeout_duration = experiment_duration * 2;
+                                // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
+                                // let timeout_duration = experiment_duration + Duration::from_secs(60);
+                                let timeout_duration = experiment_duration;
+                                let accept_result = timeout(timeout_duration, listener.accept()).await;
+
+                                match accept_result {
+                                    Ok(Ok((stream, _))) => {
+                                        // Handle the connection
+                                        //tokio::spawn(handle_connection(stream, &mut line_count, desired_line_count, &mut file));
+                                        let mut file_clone = file.clone();
+                                        let mut line_count_clone = line_count.clone();
+                                        let mut shutdown_triggered_clone = shutdown_triggered.clone();
+                                        let mut experiment_start_clone = experiment_start.clone();
+                                        let mut timeout_duration_clone = timeout_duration.clone();
+                                        let desired_line_count_copy = desired_line_count;
+                                        let completed_threads_clone = completed_threads.clone();
+                                        num_spawned += 1;
+                                        tokio::spawn(async move {
+                                            if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone, experiment_start_clone, timeout_duration).await {
+                                                eprintln!("Error handling connection: {}", e);
+                                            }
+                                            completed_threads_clone.fetch_add(1, Ordering::SeqCst);
+                                        });
+                                    }
+                                    Ok(Err(e)) => {
+                                        eprintln!("Error accepting connection: {}", e);
+                                    }
+                                    Err(_) => {
+                                        break;
+                                    }
                                 }
                             }
-                        }
                             loop {
                                 let current_time = SystemTime::now();
                                 if let Ok(elapsed_time) = current_time.duration_since(experiment_start) {
@@ -243,60 +254,60 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     sleep(Duration::from_secs(5));
                                 }
                             }
-                        //check timeout
+                            //check timeout
+                        }
+                    });
+                    if line_count.load(SeqCst) < desired_line_count as usize {
+                        // Handle timeout here
+                        let mut error_file = OpenOptions::new()
+                            .append(true)
+                            .create(true)
+                            //.open(&experiment.generated_folder.join("error.txt"))
+                            .open(&output_directory.join("error.csv"))
+                            .unwrap();
+                        //let error_string = format!("Aborted experiment in attempt {}", attempt);
+                        let error_string = format!("{},{},{},{}\n", experiment.generated_folder.to_str().ok_or("Could not convert output directory to string")?, attempt, line_count.load(SeqCst), desired_line_count);
+                        println!("Writing error string: {}", error_string);
+                        error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
                     }
-                });
-                if line_count.load(SeqCst) < desired_line_count as usize {
-                    // Handle timeout here
-                    let mut error_file = OpenOptions::new()
-                        .append(true)
-                        .create(true)
-                        //.open(&experiment.generated_folder.join("error.txt"))
-                        .open(&output_directory.join("error.csv"))
-                        .unwrap();
-                    //let error_string = format!("Aborted experiment in attempt {}", attempt);
-                    let error_string = format!("{},{},{},{}\n", experiment.generated_folder.to_str().ok_or("Could not convert output directory to string")?, attempt, line_count.load(SeqCst), desired_line_count);
-                    println!("Writing error string: {}", error_string);
-                    error_file.write_all(error_string.as_bytes()).expect("Error while writing error message to file");
-                }
-                //get_reconnect_list(8081).unwrap();
-                experiment.kill_processes()?;
-                source_input_server_process.kill()?;
-                let current_time = SystemTime::now();
-                println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
-                let mut tuple_count_string = format!("{},{},{}\n", attempt, line_count.load(SeqCst), desired_line_count);
-                let tuple_count_path = file_path.clone().add("tuple_count.csv");
-                let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
-                tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
-                let mut actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
-                let reconnect_list_path = file_path.clone().add("reconnects.csv");
-                let mut reconnect_list_file = File::create(PathBuf::from(reconnect_list_path)).unwrap();
-                reconnect_list_file.write_all(actual_reconnect_calls.iter().map(|x| x.as_nanos().to_string()).collect::<Vec<String>>().join("\n").as_bytes()).expect("Error while writing reconnect list to file");
-                //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
-                //let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
-                //if notebook_path.exists() {
-                if let Some(notebook_path) = &simulation_config.get_analysis_script_path() {
-                    create_notebook(&PathBuf::from(&file_path), &notebook_path, &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
+                    //get_reconnect_list(8081).unwrap();
+                    experiment.kill_processes()?;
+                    source_input_server_process.kill()?;
+                    let current_time = SystemTime::now();
+                    println!("Finished attempt for experiment {} of {}. attempt: {} running for {:?}", run_number, total_number_of_runs, attempt, current_time.duration_since(experiment_start));
+                    let mut tuple_count_string = format!("{},{},{}\n", attempt, line_count.load(SeqCst), desired_line_count);
+                    let tuple_count_path = file_path.clone().add("tuple_count.csv");
+                    let mut tuple_count_file = File::create(PathBuf::from(tuple_count_path)).unwrap();
+                    tuple_count_file.write_all(tuple_count_string.as_bytes()).expect("Error while writing tuple count to file");
+                    let mut actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
+                    let reconnect_list_path = file_path.clone().add("reconnects.csv");
+                    let mut reconnect_list_file = File::create(PathBuf::from(reconnect_list_path)).unwrap();
+                    reconnect_list_file.write_all(actual_reconnect_calls.iter().map(|x| x.as_nanos().to_string()).collect::<Vec<String>>().join("\n").as_bytes()).expect("Error while writing reconnect list to file");
+                    //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
+                    //let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
+                    //if notebook_path.exists() {
+                    if let Some(notebook_path) = &simulation_config.get_analysis_script_path() {
+                        create_notebook(&PathBuf::from(&file_path), &notebook_path, &experiment.generated_folder.join(format!("analysis_run{}.ipynb", attempt)))?;
+                    } else {
+                        println!("No analysis script defined")
+                    }
+                    if (shutdown_triggered.load(Ordering::SeqCst)) {
+                        break;
+                    }
+                    // Check if the maximum number of lines has been written
+                    // if line_count.load(SeqCst) >= desired_line_count as usize {
+                    //     file.flush().expect("TODO: panic message");
+                    //     break;
+                    // }
                 } else {
-                    println!("No analysis script defined")
+                    //todo: move inside the experiment impl
+                    println!("Failed to add all mobile edges");
                 }
-                if (shutdown_triggered.load(Ordering::SeqCst)) {
-                    break;
-                }
-                // Check if the maximum number of lines has been written
-                // if line_count.load(SeqCst) >= desired_line_count as usize {
-                //     file.flush().expect("TODO: panic message");
-                //     break;
-                // }
+                source_input_server_process.kill()?;
             } else {
                 //todo: move inside the experiment impl
-                println!("Failed to add all mobile edges");
+                println!("Experiment failed to start");
             }
-            source_input_server_process.kill()?;
-        } else {
-            //todo: move inside the experiment impl
-            println!("Experiment failed to start");
-        }
             //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
             //source_input_server_process.kill()?;

@@ -476,13 +476,14 @@ pub struct Parameters {
     pub post_cooldown_time: Duration,
     pub reconnect_input_type: ReconnectPredictorType,
     pub source_input_server_port: u16,
-    pub query_strings: Vec<String>,
+    pub query_string: String,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub reconnect_start_offset: Duration,
     //#[serde_as(as = "HashMap<String, String>")]
 
-    pub place_default_sources_on_node_ids: HashMap<String, Vec<String>>,
-    pub logical_source_names: Vec<String>,
+    // pub place_default_sources_on_node_ids: HashMap<String, Vec<String>>,
+    pub place_default_sources_on_node_ids_path: PathBuf,
+    // pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
     placementAmendmentThreadCount: u16,
 }
@@ -829,7 +830,11 @@ impl InputConfig {
         let mut logicalSources = vec![];
 
         println!("generating logical sources");
-        for name in &self.parameters.logical_source_names {
+        let place_default_sources_on_node_ids = fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
+        let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
+        let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
+        for name in place_default_sources_on_node_ids.keys() {
+            // for name in &self.parameters.logical_source_names {
             logicalSources.push(LogicalSource {
                 logicalSourceName: name.to_string(),
                 fields: vec![
@@ -1030,7 +1035,10 @@ impl InputConfig {
     }
 
     fn get_physical_sources_for_node(&self, numberOfTuplesToProducePerBuffer: u64, num_buffers: u128, total_number_of_tuples_to_ingest: &mut u64, input_id: u64) -> (Vec<PhysicalSource>, Option<u16>) {
-        let (physical_sources, number_of_slots) = if let Some((_, logical_source_names)) = self.parameters.place_default_sources_on_node_ids.get_key_value(&input_id.to_string()) {
+        let place_default_sources_on_node_ids = fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
+        let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
+        let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
+        let (physical_sources, number_of_slots) = if let Some((_, logical_source_names)) = place_default_sources_on_node_ids.get_key_value(&input_id.to_string()) {
             let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
             let mut sources = vec![];
 
