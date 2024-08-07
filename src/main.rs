@@ -189,7 +189,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
                     let mut query_strings = vec![];
                     for id in place_default_sources_on_node_ids.values().flatten().unique() {
-                        query_strings.push(query_string.replace("{INPUT}", &id.to_string()));
+                        let input_replaced = query_string.replace("{INPUT}", &id.to_string());
+                        let null_sink = input_replaced.replace("{OUTPUT}", "NullOutputSinkDescriptor::create()");
+                        query_strings.push(input_replaced);
+                        for _i in 0..experiment.input_config.parameters.query_duplication_factor {
+                            query_strings.push(null_sink.clone());
+                        }
                     }
                     std::thread::sleep(Duration::from_secs(10));
 

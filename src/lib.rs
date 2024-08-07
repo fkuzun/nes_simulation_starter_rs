@@ -488,6 +488,7 @@ pub struct Parameters {
     // pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
     placementAmendmentThreadCount: u16,
+    pub query_duplication_factor: usize
 }
 
 
