@@ -575,7 +575,7 @@ pub mod config {
         pub fn get_mobility_config_list_path(&self) -> Option<PathBuf> {
             let option = self.get_mobile_trajectories_directory();
             if let Some(mut path) = option {
-                path.push("mobility_config_list.toml");
+                path.push("topology_updates.json");
                 Some(path)
             } else {
                 None
