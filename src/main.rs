@@ -16,6 +16,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local};
 use execute::{Execute, shell};
+use itertools::Itertools;
 use reqwest::Url;
 use tokio::task;
 use tokio::time::timeout;
@@ -187,10 +188,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
                     let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
                     let mut query_strings = vec![];
-                    for (_, source_ids) in place_default_sources_on_node_ids.iter() {
-                        for id in source_ids {
-                            query_strings.push(query_string.replace("{INPUT}", &id.to_string()));
-                        }
+                    for id in place_default_sources_on_node_ids.values().flatten().unique() {
+                        query_strings.push(query_string.replace("{INPUT}", &id.to_string()));
                     }
                     std::thread::sleep(Duration::from_secs(10));
 

@@ -36,7 +36,9 @@ use serde_with::DurationSeconds;
 use tokio::io::AsyncBufReadExt;
 use regex::Regex;
 use relative_path::RelativePathBuf;
+use itertools::Itertools;
 use crate::rest_node_relocation::TopologyUpdate;
+
 
 pub mod analyze;
 
@@ -833,7 +835,7 @@ impl InputConfig {
         let place_default_sources_on_node_ids = fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
         let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
         let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
-        for name in place_default_sources_on_node_ids.values().flatten() {
+        for name in place_default_sources_on_node_ids.values().flatten().unique() {
             // for name in &self.parameters.logical_source_names {
             logicalSources.push(LogicalSource {
                 logicalSourceName: name.to_string(),
