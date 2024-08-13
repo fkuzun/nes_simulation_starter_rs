@@ -190,8 +190,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let mut query_strings = vec![];
                     for id in place_default_sources_on_node_ids.values().flatten().unique() {
                         let input_replaced = query_string.replace("{INPUT}", &id.to_string());
-                        let null_sink = input_replaced.replace("{OUTPUT}", "NullOutputSinkDescriptor::create()");
-                        query_strings.push(input_replaced);
+                        let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", id);
+                        let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
+                        let null_sink = input_replaced.replace("{SINK}", "NullOutputSinkDescriptor::create()");
+                        query_strings.push(tcp_sink);
                         for _i in 0..experiment.input_config.parameters.query_duplication_factor {
                             query_strings.push(null_sink.clone());
                         }
