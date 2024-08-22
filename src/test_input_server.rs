@@ -1,35 +1,40 @@
 use std::io::Read;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use chrono::Duration;
+use plotly::Plot;
+use plotters::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_config = ServerConfig {
         hostname: "127.0.0.1".to_string(),
         port: 8080,
+        // num_buffers: 10000,
+        // buffer_size: 10000,
         num_buffers: 10000,
-        buffer_size: 10000,
+        buffer_size: 100,
         gathering_interval: 1,
         deadline: std::time::Duration::from_secs(1),
     };
-    
+
     let executable_path = "/home/x/rustProjects/nes_simulation_starter_rs/target/debug/tcp_input_server";
-    
+
     let mut server_process = start_server_process(executable_path, &server_config)?;
-    
+
     //sleep
     std::thread::sleep(std::time::Duration::from_secs(5));
-    
+
     //connect to server
     let mut client = std::net::TcpStream::connect(format!("{}:{}", server_config.hostname, server_config.port))?;
-    
+
     //receive data from server
     let tuple_size = 40 - 16;
     let total_bytes = tuple_size * server_config.num_buffers * server_config.buffer_size;
     let mut buf = vec![0; total_bytes];
-    
+
     let mut sleep_threshold = Some(total_bytes / 4);
-    
+
     let mut bytes_read = client.read(&mut buf)?;
     while bytes_read < total_bytes {
         let new_bytes_read = client.read(&mut buf[bytes_read..])?;
@@ -37,10 +42,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
         bytes_read += new_bytes_read;
-        
+
         let gb_read = bytes_read as f64 / 1024.0 / 1024.0 / 1024.0;
         println!("Read {} bytes in total ({} GB)", bytes_read, gb_read);
-        
+
         if let Some(threshold) = sleep_threshold {
             if bytes_read > threshold {
                 println!("Sleeping for 10 seconds");
@@ -49,21 +54,88 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
+    let mut sequence_numbers = vec![];
+    let mut event_timestamps = vec![];
+
     for i in (0..buf.len()).step_by(tuple_size) {
         let tuple = &buf[i..i + tuple_size];
         let tuple_string = get_tuple_string(tuple);
         // println!("{}", tuple_string);
         let tuple_id = u64::from_le_bytes([tuple[0], tuple[1], tuple[2], tuple[3], tuple[4], tuple[5], tuple[6], tuple[7]]);
         let sequence_number = u64::from_le_bytes([tuple[8], tuple[9], tuple[10], tuple[11], tuple[12], tuple[13], tuple[14], tuple[15]]);
-        assert_eq!(tuple_id, 1); 
+        let event_timestamp = u64::from_le_bytes([tuple[16], tuple[17], tuple[18], tuple[19], tuple[20], tuple[21], tuple[22], tuple[23]]);
+
+        sequence_numbers.push(sequence_number);
+        event_timestamps.push(event_timestamp);
+
+        assert_eq!(tuple_id, 1);
         assert_eq!(sequence_number, i as u64 / tuple_size as u64);
     }
-    
+
+    //compute the delay compared to the previous timestamp for each timestamp
+    println!("Computing delays");
+    let mut previous_timestamp = 0;
+    let mut delays = vec![];
+    for timestamp in &event_timestamps {
+        let delay = timestamp - previous_timestamp;
+        delays.push(delay);
+        previous_timestamp = *timestamp;
+    }
+
+    //plot the delays
+    println!("Plotting delays");
+    let html_path = PathBuf::from("delays.html");
+    plot_timestamps(html_path, sequence_numbers.clone(), delays, "plotters-doc-data/delays.png".into(), "Delays")?;
+
+    //plot the event timestamps
+    println!("Plotting timestamps");
+    let html_path = PathBuf::from("timestamps.html");
+    plot_timestamps(html_path, sequence_numbers, event_timestamps, "plotters-doc-data/timestamps.png".into(), "Timestamps")?;
+
     server_process.kill()?;
-    
-    Ok(()) 
+
+    Ok(())
 }
+
+fn plot_timestamps(html_path: PathBuf, sequence_numbers: Vec<u64>, event_timestamps: Vec<u64>, path: PathBuf, caption: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // let mut plot = Plot::new();
+    // plot.add_trace(plotly::Scatter::new(sequence_numbers, event_timestamps));
+    // plot.write_html(html_path);
+    // Ok(())
+    let root = BitMapBackend::new(path.to_str().unwrap(), (640, 480)).into_drawing_area();
+    root.fill(&WHITE)?;
+    let mut chart = ChartBuilder::on(&root)
+        .caption(caption, ("sans-serif", 50).into_font())
+        .margin(10)
+        .x_label_area_size(30)
+        .y_label_area_size(30)
+        // .build_cartesian_2d(-1f32..1f32, -0.1f32..1f32)?;
+        .build_cartesian_2d((*sequence_numbers.first().unwrap())..(*sequence_numbers.last().unwrap()), (*event_timestamps.first().unwrap())..(*event_timestamps.last().unwrap()))?;
+
+    chart.configure_mesh().draw()?;
+
+    chart
+        .draw_series(LineSeries::new(
+            // (-50..=50).map(|x| x as f32 / 50.0).map(|x| (x, x * x)),
+            sequence_numbers.iter().zip(event_timestamps.iter()).map(|(x, y)| (*x, *y)),
+            &RED,
+        ))?
+        .label(caption)
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+    chart
+        .configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()?;
+
+    root.present()?;
+
+    Ok(())
+}
+
+
 
 struct Tuple {
     id: u64,
