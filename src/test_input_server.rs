@@ -9,11 +9,11 @@ use plotters::prelude::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_config = ServerConfig {
         hostname: "127.0.0.1".to_string(),
-        port: 8080,
+        port: 8081,
+        num_buffers: 100,
+        buffer_size: 1000,
         // num_buffers: 10000,
-        // buffer_size: 10000,
-        num_buffers: 10000,
-        buffer_size: 100,
+        // buffer_size: 100,
         gathering_interval: 1,
         deadline: std::time::Duration::from_secs(1),
     };

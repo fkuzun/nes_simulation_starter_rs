@@ -4,8 +4,6 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::env;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use chrono::{DateTime, Local};
-
 
 fn main() -> std::io::Result<()> {
     // Parse environment variables
@@ -29,11 +27,9 @@ fn main() -> std::io::Result<()> {
             std::process::exit(1);
         }
     };
-    //let deadline = Instant::now() + std::time::Duration::from_secs(30);
      
     println!("Server listening on port {}...", port);
     println!("Deadline for ingestion: {:?}", deadline);
-    // println!("Deadline for ingestion: {:?}", DateTime::<Local>::from(deadline));
 
     let gather_interval = std::time::Duration::from_millis(gathering_interval);
 
@@ -61,9 +57,6 @@ fn main() -> std::io::Result<()> {
 
 fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size: usize, gathering_interval: std::time::Duration, deadline: std::time::Duration) -> std::io::Result<()> {
     println!("Starting tcp writer thread");
-    //sleep if deadline is not reached
-    println!("Deadline: {:?}", deadline);
-    println!("Current time: {:?}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap()); 
     
     let (sender, receiver): (Sender<Option<Vec<u8>>>, Receiver<Option<Vec<u8>>>) = channel();
     thread::spawn(move || {
@@ -84,6 +77,10 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
             }
         }
     });
+    
+    //sleep if deadline is not reached
+    println!("Deadline: {:?}", deadline);
+    println!("Current time: {:?}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap());
     if deadline > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
         let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         println!("Deadline not reached, sleeping for {:?}", remaining);
@@ -100,7 +97,6 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
         sender.send(Some(data)).unwrap();
 
         next_emission_time += gathering_interval;
-        // std::thread::sleep(gathering_interval);
         if next_emission_time > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
             let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             println!("next emission not reached, sleeping for {:?}", remaining);
