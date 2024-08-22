@@ -64,13 +64,7 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
     //sleep if deadline is not reached
     println!("Deadline: {:?}", deadline);
     println!("Current time: {:?}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap()); 
-    if deadline > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
-        let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        println!("Deadline not reached, sleeping for {:?}", remaining);
-        std::thread::sleep(remaining);
-    }
     
-    println!("Deadline reached, starting to write to socket"); 
     let (sender, receiver): (Sender<Option<Vec<u8>>>, Receiver<Option<Vec<u8>>>) = channel();
     thread::spawn(move || {
         loop {
@@ -90,6 +84,14 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
             }
         }
     });
+    if deadline > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
+        let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        println!("Deadline not reached, sleeping for {:?}", remaining);
+        std::thread::sleep(remaining);
+    }
+    println!("Deadline reached, starting to write to socket");
+    
+    let mut next_emission_time = deadline;
 
     let mut sequence_nr = 0;
     for _buffer in 0..num_buffers {
@@ -97,7 +99,13 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
         let data = generate_data(id, &mut sequence_nr, buffer_size)?;
         sender.send(Some(data)).unwrap();
 
-        std::thread::sleep(gathering_interval);
+        next_emission_time += gathering_interval;
+        // std::thread::sleep(gathering_interval);
+        if next_emission_time > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
+            let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+            println!("next emission not reached, sleeping for {:?}", remaining);
+            std::thread::sleep(remaining);
+        }
     }
     
     println!("All buffers done for id {}", id);
