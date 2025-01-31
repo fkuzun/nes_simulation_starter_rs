@@ -148,7 +148,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .arg(experiment.num_buffers.to_string())
                     .arg(experiment.input_config.default_source_input.tuples_per_buffer.to_string())
                     .arg(experiment.input_config.default_source_input.gathering_interval.as_millis().to_string())
-                    .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string())
+                    .arg(ingestion_start.duration_since(SystemTime::UNIX_EPOCH).expect("Error while subtracting unix epock from ingestion start").as_millis().to_string())
                     .spawn()?;
                 println!("input server process id {}", source_input_server_process.id());
 

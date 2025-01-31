@@ -97,9 +97,10 @@ fn handle_client(mut stream: TcpStream, id: u64, num_buffers: usize, buffer_size
         sender.send(Some(data)).unwrap();
 
         next_emission_time += gathering_interval;
-        if next_emission_time > SystemTime::now().duration_since(UNIX_EPOCH).unwrap() {
-            let remaining = deadline - SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-            println!("next emission not reached, sleeping for {:?}", remaining);
+        let curr_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        if next_emission_time > curr_time {
+            let remaining = next_emission_time - curr_time;
+            // println!("next emission not reached, sleeping for {:?}", remaining);
             std::thread::sleep(remaining);
         }
     }
