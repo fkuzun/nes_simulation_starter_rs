@@ -135,12 +135,12 @@ impl REST_topology_updater {
 
     // send a topology update to the REST API
     fn send_topology_update(&self, update: &TopologyUpdate) -> Result<(), Box<dyn Error>> {
-        print!("Sending topology update");
+        // print!("Sending topology update");
         let response = self.client.post(self.url.clone())
             // .json(&update.events)
             .json(&update)
             .send()?;
-        print!("Sent update, response: {:?}", response);
+        // print!("Sent update, response: {:?}", response);
         if response.status().is_success() {
             Ok(())
         } else {
@@ -170,19 +170,19 @@ impl REST_topology_updater {
         println!("Starting central topology updates. {} updates in list", self.topology_updates.len());
         let mut actual_calls = vec![];
         for update in &self.topology_updates {
-            dbg!(update); 
+            // dbg!(update); 
             //if (update.timestamp.as_nanos() == 0) {
             //    continue;
             //}
             let update_time = update.timestamp.add(self.start_time);
             let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             while now < update_time {
-                println!("{} < {}  Waiting for next update, going to sleep for {} seconds", now.as_secs(), update_time.as_secs(), (update_time - now).as_secs());
+                // println!("{} < {}  Waiting for next update, going to sleep for {} seconds", now.as_secs(), update_time.as_secs(), (update_time - now).as_secs());
                 std::thread::sleep(update_time - now);
                 now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             }
             if let Ok(_) = self.send_topology_update(update) {
-                println!("Sent update at {:?}", now);
+                // println!("Sent update at {:?}", now);
                 actual_calls.push(now);
             } else {
                 println!("failed to send update, returning");

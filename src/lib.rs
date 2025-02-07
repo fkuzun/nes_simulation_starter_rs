@@ -750,6 +750,7 @@ impl ExperimentSetup {
 
     fn start_fixed_workers(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         for path in &self.fixed_config_paths {
+            sleep(Duration::from_millis(200));
             if shutdown_triggered.load(Ordering::SeqCst) {
                 return Err(String::from("Shutdown triggered").into());
             }
@@ -766,6 +767,7 @@ impl ExperimentSetup {
 
     fn start_mobile(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
         for path in &self.mobile_config_paths {
+            sleep(Duration::from_millis(200));
             if shutdown_triggered.load(Ordering::SeqCst) {
                 return Err(String::from("Shutdown triggered").into());
             }
