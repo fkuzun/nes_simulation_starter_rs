@@ -158,7 +158,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // experiment.central_topology_updates.clone(),
                     experiment.simulated_reconnects.topology_updates.clone(),
                     reconnect_start.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
-                    Duration::from_millis(10), Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
+                    Duration::from_millis(10),
+                    experiment.input_config.parameters.speedup_factor,
+                     Url::parse(&format!("http://127.0.0.1:{}/v1/nes/topology/update", &rest_port.to_string())).unwrap(),
                     // experiment.initial_topology_update.as_ref().unwrap().clone());
                     experiment.simulated_reconnects.initial_parents.clone());
                 //todo: check if we need to join this thread
