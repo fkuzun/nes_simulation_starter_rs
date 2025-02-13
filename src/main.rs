@@ -8,12 +8,13 @@ use std::io::Write;
 use std::net::TcpListener;
 use std::ops::Add;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use avro_rs::{Schema, Writer};
 use chrono::{DateTime, Local};
 use execute::{Execute, shell};
 use itertools::Itertools;
@@ -91,6 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         input_config_path,
         output_directory: output_directory.clone(),
         run_for_retrial_path,
+        output_type: OutputType::AVRO,
     };
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let coordinator_path = &nes_executable_paths.coordinator_path;
@@ -131,7 +133,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             if let Ok(_) = experiment.start(&nes_executable_paths, Arc::clone(&shutdown_triggered), &log_level) {
                 let experiment_start = SystemTime::now();
                 let ingestion_start = experiment_start.add(experiment.input_config.parameters.deployment_time_offset);
-
 
                 let reconnect_start = ingestion_start.add(experiment.input_config.parameters.warmup);
                 let start_date_time = DateTime::<Local>::from(experiment_start);
@@ -232,7 +233,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         let completed_threads_clone = completed_threads.clone();
                                         num_spawned += 1;
                                         tokio::spawn(async move {
-                                            if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone, experiment_start_clone, timeout_duration).await {
+                                            if let Err(e) = handle_connection(stream, line_count_clone, desired_line_count_copy, file_clone, shutdown_triggered_clone, experiment_start_clone, timeout_duration, simulation_config.output_type, writer.clone()).await {
                                                 eprintln!("Error handling connection: {}", e);
                                             }
                                             completed_threads_clone.fetch_add(1, Ordering::SeqCst);
@@ -314,10 +315,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 //todo: move inside the experiment impl
                 println!("Experiment failed to start");
             }
+            
             //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
             //source_input_server_process.kill()?;
         }
+
         experiment.kill_processes()?;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
             break;

@@ -10,7 +10,7 @@ use std::{fs, io, sync, time};
 
 use std::fs::{File, read_to_string};
 use std::net::TcpListener;
-use std::ops::{Add, Range};
+use std::ops::{Add, Deref, Range};
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -21,7 +21,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-
+use avro_rs::{Schema, Writer};
+use avro_rs::types::Record;
 use chrono::Local;
 use nes_tools::launch::Launch;
 use nes_tools::query::SubmitQueryResponse;
@@ -263,6 +264,7 @@ pub struct SimulationConfig {
     pub output_directory: PathBuf,
     pub input_config_path: PathBuf,
     pub run_for_retrial_path: Option<PathBuf>,
+    pub output_type: OutputType,
 }
 
 impl SimulationConfig {
@@ -1416,8 +1418,23 @@ enum WorkerConfigType {
     Mobile(MobileWorkerConfig),
 }
 
+#[derive(Debug, Deserialize, Copy, Clone)]
+pub enum OutputType {
+    CSV,
+    AVRO
+}
 
-pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<AtomicUsize>, desired_line_count: u64, file: Arc<Mutex<File>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration) -> Result<(), Box<dyn Error>> {
+#[derive(Debug, Serialize, Deserialize)]
+struct OutputTuple {
+    id: u64,
+    sequence_number: u64,
+    event_time: u64,
+    processing_time: u64,
+    emission_time: u64
+
+}
+
+pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<AtomicUsize>, desired_line_count: u64, file: Arc<Mutex<File>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration, output_type: OutputType) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
     //let mut reader = tokio::io::BufReader::new(stream);
     //let mut line = String::new();
@@ -1478,12 +1495,79 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<At
     let tuple_size = 40;
     let valid_bytes = buf.len() - (buf.len() % tuple_size);
     let mut lock = file.lock().unwrap();
-    for i in (0..valid_bytes).step_by(tuple_size) {
-        line_count.fetch_add(1, Ordering::SeqCst);
-        let tuple = &buf[i..i + tuple_size];
-        let tuple_string = get_tuple_string(tuple);
-        lock.write_all(tuple_string.as_bytes())?;
-        lock.write_all(b"\n")?;
+
+    match output_type {
+        OutputType::CSV => {
+            for i in (0..valid_bytes).step_by(tuple_size) {
+                line_count.fetch_add(1, Ordering::SeqCst);
+                let tuple = &buf[i..i + tuple_size];
+                let tuple_string = get_tuple_string(tuple);
+                lock.write_all(tuple_string.as_bytes())?;
+                lock.write_all(b"\n")?;
+            }
+        },
+        OutputType::AVRO => {
+            let raw_schema = r#"
+            {
+                "type": "record",
+                "name": "experiment_output",
+                "fields": [
+                    {"name": "id", "type": "long"},
+                    {"name": "sequence_number", "type": "long"},
+                    {"name": "event_time", "type": "long"},
+                    {"name": "processing_time", "type": "long"},
+                    {"name": "emission_time", "type": "long"}
+                ]
+            }
+            "#;
+            let schema = Schema::parse_str(raw_schema)?;
+
+            println!("{:?}", schema);
+
+            let mut writer = Writer::new(&schema, Vec::new());
+
+            let mut lines = 0;
+            for i in (0..valid_bytes).step_by(tuple_size) {
+                line_count.fetch_add(1, Ordering::SeqCst);
+                let binary_tuple = &buf[i..i + tuple_size];
+
+                let output_tuple = OutputTuple {
+                    id: u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]),
+                    sequence_number: u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]),
+                    event_time: u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]),
+                    processing_time: u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]),
+                    emission_time: u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]),
+                };
+                
+                writer.append_ser(output_tuple)?;
+                lines += 1;
+
+                // let mut record = Record::new(writer.schema()).unwrap();
+                // 
+                // let id = u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]);
+                // let sequence_number = u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]);
+                // let event_timestamp = u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]);
+                // let ingestion_timestamp = u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]);
+                // let output_timestamp = u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]);
+                // 
+                // record.put("id", i64::try_from(id)?);
+                // record.put("sequence_number", i64::try_from(sequence_number)?);
+                // record.put("event_time", i64::try_from(event_timestamp)?);
+                // record.put("ingestion_time", i64::try_from(ingestion_timestamp)?);
+                // record.put("output_timestamp", i64::try_from(output_timestamp)?);
+
+                // record.put("id", i64::try_from(id)?);
+                // record.put("sequence_number", i64::try_from(sequence_number)?);
+                // record.put("event_timestamp", i64::try_from(event_timestamp)?);
+                // record.put("ingestion_timestamp", i64::try_from(ingestion_timestamp)?);
+                // record.put("output_timestamp", i64::try_from(output_timestamp)?);
+                // writer.append(record)?;
+
+            }
+            println!("{} lines converted to avro", lines);
+            let encoded = writer.into_inner()?;
+            lock.write_all(&encoded)?;
+        }
     }
 
 
