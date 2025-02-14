@@ -24,6 +24,7 @@ use std::time::{Duration, SystemTime};
 use avro_rs::{Schema, Writer};
 use avro_rs::types::Record;
 use chrono::Local;
+use futures::AsyncWriteExt;
 use nes_tools::launch::Launch;
 use nes_tools::query::SubmitQueryResponse;
 use nes_tools::topology::{AddEdgeReply, AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType};
@@ -490,7 +491,7 @@ pub struct Parameters {
     // pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
     placementAmendmentThreadCount: u16,
-    pub query_duplication_factor: usize
+    pub query_duplication_factor: usize,
 }
 
 
@@ -1421,7 +1422,7 @@ enum WorkerConfigType {
 #[derive(Debug, Deserialize, Copy, Clone)]
 pub enum OutputType {
     CSV,
-    AVRO
+    AVRO,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1430,11 +1431,80 @@ struct OutputTuple {
     sequence_number: u64,
     event_time: u64,
     processing_time: u64,
-    emission_time: u64
-
+    emission_time: u64,
 }
 
-pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<AtomicUsize>, desired_line_count: u64, file: Arc<Mutex<File>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration, output_type: OutputType) -> Result<(), Box<dyn Error>> {
+pub struct AvroOutputWriter<'a> {
+    // writer: Writer<'a, File>,
+    file: File,
+    writer: Option<Writer<'a, Vec<u8>>>,
+}
+
+impl<'a> AvroOutputWriter<'a> {
+    pub fn new(schema: &'a Schema, file: File) -> Self {
+        // let raw_schema = r#"
+        //     {
+        //         "type": "record",
+        //         "name": "experiment_output",
+        //         "fields": [
+        //             {"name": "id", "type": "long"},
+        //             {"name": "sequence_number", "type": "long"},
+        //             {"name": "event_time", "type": "long"},
+        //             {"name": "processing_time", "type": "long"},
+        //             {"name": "emission_time", "type": "long"}
+        //         ]
+        //     }
+        //     "#;
+        // let schema = Schema::parse_str(raw_schema).unwrap();
+
+        println!("{:?}", schema);
+
+        let mut writer = Some(Writer::new(&schema, Vec::new()));
+        // let mut writer = Writer::new(&schema, file);
+        Self { writer, file }
+    }
+}
+
+impl OutputWriter for AvroOutputWriter<'_> {
+    fn write(&mut self, tuple: &OutputTuple) -> Result<(), Box<dyn Error>> {
+        self.writer.as_mut().unwrap().append_ser(tuple)?;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Box<dyn Error>> {
+        // self.writer.flush()?;
+        let encoded = self.writer.take().unwrap().into_inner().unwrap();
+        self.file.write_all(&encoded)?;
+        Ok(())
+    }
+}
+
+pub struct FileOutputWriter {
+    pub file: File,
+}
+
+impl OutputWriter for FileOutputWriter {
+    fn write(&mut self, tuple: &OutputTuple) -> Result<(), Box<dyn Error>> {
+        let tuple_string = format!("{},{},{},{},{}", tuple.id, tuple.sequence_number, tuple.event_time, tuple.processing_time, tuple.emission_time);
+        self.file.write_all(tuple_string.as_bytes())?;
+        self.file.write_all(b"\n")?;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Box<dyn Error>> {
+        self.file.flush()?;
+        Ok(())
+    }
+}
+
+
+
+pub trait OutputWriter {
+    fn write(&mut self, tuple: &OutputTuple) -> Result<(), Box<dyn Error>>;
+    fn flush(&mut self) -> Result<(), Box<dyn Error>>;
+}
+
+pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::TcpStream, line_count: Arc<AtomicUsize>, desired_line_count: u64, file: Arc<Mutex<W>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration, output_type: OutputType) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
     //let mut reader = tokio::io::BufReader::new(stream);
     //let mut line = String::new();
@@ -1498,33 +1568,27 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<At
 
     match output_type {
         OutputType::CSV => {
+            //todo: reactivate
             for i in (0..valid_bytes).step_by(tuple_size) {
                 line_count.fetch_add(1, Ordering::SeqCst);
-                let tuple = &buf[i..i + tuple_size];
-                let tuple_string = get_tuple_string(tuple);
-                lock.write_all(tuple_string.as_bytes())?;
-                lock.write_all(b"\n")?;
+                let binary_tuple = &buf[i..i + tuple_size];
+                // let tuple_string = get_tuple_string(tuple);
+                // lock.write_all(tuple_string.as_bytes())?;
+                // lock.write_all(b"\n")?;
+
+                let output_tuple = OutputTuple {
+                    id: u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]),
+                    sequence_number: u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]),
+                    event_time: u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]),
+                    processing_time: u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]),
+                    emission_time: u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]),
+                };
+
+                // let mut lock = file.lock().unwrap();
+                lock.write(&output_tuple)?
             }
-        },
+        }
         OutputType::AVRO => {
-            let raw_schema = r#"
-            {
-                "type": "record",
-                "name": "experiment_output",
-                "fields": [
-                    {"name": "id", "type": "long"},
-                    {"name": "sequence_number", "type": "long"},
-                    {"name": "event_time", "type": "long"},
-                    {"name": "processing_time", "type": "long"},
-                    {"name": "emission_time", "type": "long"}
-                ]
-            }
-            "#;
-            let schema = Schema::parse_str(raw_schema)?;
-
-            println!("{:?}", schema);
-
-            let mut writer = Writer::new(&schema, Vec::new());
 
             let mut lines = 0;
             for i in (0..valid_bytes).step_by(tuple_size) {
@@ -1538,8 +1602,8 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<At
                     processing_time: u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]),
                     emission_time: u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]),
                 };
-                
-                writer.append_ser(output_tuple)?;
+
+                lock.write(&output_tuple)?;
                 lines += 1;
 
                 // let mut record = Record::new(writer.schema()).unwrap();
@@ -1565,8 +1629,6 @@ pub async fn handle_connection(stream: tokio::net::TcpStream, line_count: Arc<At
 
             }
             println!("{} lines converted to avro", lines);
-            let encoded = writer.into_inner()?;
-            lock.write_all(&encoded)?;
         }
     }
 

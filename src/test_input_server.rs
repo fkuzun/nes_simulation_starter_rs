@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use chrono::Duration;
 use plotly::Plot;
-use plotters::prelude::*;
+// use plotters::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_config = ServerConfig {
