@@ -261,7 +261,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
                     // let mut file=  Arc::new(Mutex::new(AvroOutputWriter { file, schema: &schema }));
-                    let mut file=  Arc::new(Mutex::new(AvroOutputWriter::new(&schema, file)));
+                    // let mut file=  Arc::new(Mutex::new(AvroOutputWriter::new(&schema, file)));
+                    let mut file=  Arc::new(Mutex::new(AvroOutputWriter::new(file)));
 
                     // let mut file = Arc::new(Mutex::new(file));
 

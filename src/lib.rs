@@ -1434,46 +1434,51 @@ struct OutputTuple {
     emission_time: u64,
 }
 
-pub struct AvroOutputWriter<'a> {
+pub struct AvroOutputWriter {
     // writer: Writer<'a, File>,
     file: File,
-    writer: Option<Writer<'a, Vec<u8>>>,
+    // writer: Option<Writer<'a, Vec<u8>>>,
+    buffer: Vec<OutputTuple>,
 }
 
-impl<'a> AvroOutputWriter<'a> {
-    pub fn new(schema: &'a Schema, file: File) -> Self {
-        // let raw_schema = r#"
-        //     {
-        //         "type": "record",
-        //         "name": "experiment_output",
-        //         "fields": [
-        //             {"name": "id", "type": "long"},
-        //             {"name": "sequence_number", "type": "long"},
-        //             {"name": "event_time", "type": "long"},
-        //             {"name": "processing_time", "type": "long"},
-        //             {"name": "emission_time", "type": "long"}
-        //         ]
-        //     }
-        //     "#;
-        // let schema = Schema::parse_str(raw_schema).unwrap();
-
-        println!("{:?}", schema);
-
-        let mut writer = Some(Writer::new(&schema, Vec::new()));
-        // let mut writer = Writer::new(&schema, file);
-        Self { writer, file }
+impl AvroOutputWriter {
+    pub fn new(file: File) -> Self {
+        Self { file, buffer: Vec::new() }
     }
 }
 
-impl OutputWriter for AvroOutputWriter<'_> {
-    fn write(&mut self, tuple: &OutputTuple) -> Result<(), Box<dyn Error>> {
-        self.writer.as_mut().unwrap().append_ser(tuple)?;
+impl OutputWriter for AvroOutputWriter {
+    fn write(&mut self, tuple: OutputTuple) -> Result<(), Box<dyn Error>> {
+        self.buffer.push(tuple);
         Ok(())
     }
 
     fn flush(&mut self) -> Result<(), Box<dyn Error>> {
-        // self.writer.flush()?;
-        let encoded = self.writer.take().unwrap().into_inner().unwrap();
+        let raw_schema = r#"
+            {
+                "type": "record",
+                "name": "experiment_output",
+                "fields": [
+                    {"name": "id", "type": "long"},
+                    {"name": "sequence_number", "type": "long"},
+                    {"name": "event_time", "type": "long"},
+                    {"name": "processing_time", "type": "long"},
+                    {"name": "emission_time", "type": "long"}
+                ]
+            }
+            "#;
+        let schema = Schema::parse_str(raw_schema).unwrap();
+
+        println!("{:?}", schema);
+
+        let mut writer = Writer::new(&schema, Vec::new());
+        
+        for tuple in &self.buffer {
+            writer.append_ser(tuple)?;
+        }
+        
+        // let mut writer = Writer::new(&schema, file);
+        let encoded = writer.into_inner().unwrap();
         self.file.write_all(&encoded)?;
         Ok(())
     }
@@ -1484,7 +1489,7 @@ pub struct FileOutputWriter {
 }
 
 impl OutputWriter for FileOutputWriter {
-    fn write(&mut self, tuple: &OutputTuple) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, tuple: OutputTuple) -> Result<(), Box<dyn Error>> {
         let tuple_string = format!("{},{},{},{},{}", tuple.id, tuple.sequence_number, tuple.event_time, tuple.processing_time, tuple.emission_time);
         self.file.write_all(tuple_string.as_bytes())?;
         self.file.write_all(b"\n")?;
@@ -1500,7 +1505,7 @@ impl OutputWriter for FileOutputWriter {
 
 
 pub trait OutputWriter {
-    fn write(&mut self, tuple: &OutputTuple) -> Result<(), Box<dyn Error>>;
+    fn write(&mut self, tuple: OutputTuple) -> Result<(), Box<dyn Error>>;
     fn flush(&mut self) -> Result<(), Box<dyn Error>>;
 }
 
@@ -1585,7 +1590,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
                 };
 
                 // let mut lock = file.lock().unwrap();
-                lock.write(&output_tuple)?
+                lock.write(output_tuple)?
             }
         }
         OutputType::AVRO => {
@@ -1603,7 +1608,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
                     emission_time: u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]),
                 };
 
-                lock.write(&output_tuple)?;
+                lock.write(output_tuple)?;
                 lines += 1;
 
                 // let mut record = Record::new(writer.schema()).unwrap();
