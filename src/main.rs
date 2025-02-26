@@ -494,7 +494,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
-            //source_input_server_process.kill()?;
+            let wait_time = 30;
+            println!(
+                "Finished run sleeping {} seconds before next run",
+                wait_time
+            );
+            sleep(Duration::from_secs(wait_time));
         }
 
         experiment.kill_processes()?;
