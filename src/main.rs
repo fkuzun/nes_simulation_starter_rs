@@ -316,9 +316,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 //todo: move inside the experiment impl
                 println!("Experiment failed to start");
             }
-            //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
-            //source_input_server_process.kill()?;
+            let wait_time = 30;
+            println!("Finished run sleeping {} seconds before next u", wait_time);
+            sleep(Duration::from_secs(wait_time));
         }
         experiment.kill_processes()?;
         if (shutdown_triggered.load(Ordering::SeqCst)) {
