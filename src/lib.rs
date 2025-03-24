@@ -971,7 +971,7 @@ impl InputConfig {
             };
             generated_mobility_configs.push(generated_mobility_config.clone());
 
-            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, input_id);
+            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, input_id + 1);
 
             //create config
             let worker_config = MobileWorkerConfig {

@@ -25,25 +25,7 @@ use tokio::task;
 use tokio::time::timeout;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // let mut command = shell("ps -ef | grep 'tcp_input_server' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
-    // command.stdout(Stdio::piped());
-    //
-    // let output = command.execute_output().unwrap();
-    //
-    // println!("{}", String::from_utf8(output.stdout).unwrap());
-    // let mut command = shell("ps -ef | grep 'nesWorker' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
-    // command.stdout(Stdio::piped());
-    //
-    // let output = command.execute_output().unwrap();
-    //
-    // println!("{}", String::from_utf8(output.stdout).unwrap());
-    // let mut command = shell("ps -ef | grep 'nesCoordinator' | grep -v grep | awk '{print $2}' | xargs -r kill -9");
-    // command.stdout(Stdio::piped());
-
-    // let output = command.execute_output().unwrap();
-
-    // println!("{}", String::from_utf8(output.stdout).unwrap());
-
+    let join_query = true;
     let raw_schema = r#"
                         {
                             "type": "record",
