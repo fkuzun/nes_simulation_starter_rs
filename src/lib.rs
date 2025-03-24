@@ -1475,6 +1475,7 @@ impl OutputWriter for AvroOutputWriter {
                 "name": "experiment_output",
                 "fields": [
                     {"name": "id", "type": "long"},
+                    {"name": "join_id", "type": "long"},
                     {"name": "sequence_number", "type": "long"},
                     {"name": "event_time", "type": "long"},
                     {"name": "processing_time", "type": "long"},
@@ -1582,7 +1583,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
     // }
     //file.write_all(&buf[0..total_valid_byte_count])?;
 
-    let tuple_size = 40;
+    let tuple_size = 48;
     let valid_bytes = buf.len() - (buf.len() % tuple_size);
     let mut lock = file.lock().unwrap();
 
