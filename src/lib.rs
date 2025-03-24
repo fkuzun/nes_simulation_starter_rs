@@ -852,6 +852,10 @@ impl InputConfig {
                         Type: UINT64,
                     },
                     LogicalSourceField {
+                        name: "join_id".to_string(),
+                        Type: UINT64,
+                    },
+                    LogicalSourceField {
                         name: "value".to_string(),
                         Type: UINT64,
                     },
@@ -906,7 +910,7 @@ impl InputConfig {
             if input_id > &max_fixed_id {
                 max_fixed_id = *input_id;
             }
-            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, *input_id);
+            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, *input_id + 1);
             let worker_config = FixedWorkerConfig {
                 // rpcPort: next_free_port,
                 // dataPort: next_free_port + 1,
@@ -1054,6 +1058,7 @@ impl InputConfig {
             //iterate over logical source names
             for (index, logical_source_name) in logical_source_names.iter().enumerate() {
                 *total_number_of_tuples_to_ingest += num_tuples;
+                // println!("{}, {}: raise number of tuples to ingest by {} to {}", index, logical_source_name, num_tuples, *total_number_of_tuples_to_ingest);
                 sources.push(PhysicalSource {
                     logicalSourceName: logical_source_name.to_string(),
                     physicalSourceName: format!("physical_{}", index).to_owned(),
@@ -1437,14 +1442,13 @@ struct OutputTuple {
 }
 
 impl OutputTuple {
-    fn from_bytes(bytes: &[u8]) -> Self {
-        let mut cursor = Cursor::new(bytes);
-        let id = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let join_id = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let sequence_number = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let event_time = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let processing_time = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let emission_time = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+    fn from_bytes(binary_tuple: &[u8]) -> Self {
+        let id = u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]);
+        let join_id = u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]);
+        let sequence_number = u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]);
+        let event_time = u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]);
+        let processing_time = u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]);
+        let emission_time = u64::from_le_bytes([binary_tuple[40], binary_tuple[41], binary_tuple[42], binary_tuple[43], binary_tuple[44], binary_tuple[45], binary_tuple[46], binary_tuple[47]]);
         Self { id, join_id, sequence_number, event_time, processing_time, emission_time }
     }
 }
