@@ -1,7 +1,7 @@
 use avro_rs::{Schema, Writer};
 use chrono::{DateTime, Local};
 use execute::{shell, Execute};
-use itertools::Itertools;
+use itertools::{assert_equal, Itertools};
 use reqwest::Url;
 use simulation_runner_lib::analyze::create_notebook;
 use simulation_runner_lib::*;
@@ -25,7 +25,6 @@ use tokio::task;
 use tokio::time::timeout;
 
 fn main() -> Result<(), Box<dyn Error>> {
-
     let args: Vec<String> = env::args().collect();
     if args.len() < 5 || args.len() > 8 {
         eprintln!("Usage: {} <nes directory> <experiment input config path> <output directory> <tcp input server executable> <log level (optional)>, <experiment path for retrial (optional)>", args[0]);
@@ -94,10 +93,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         s.store(true, Ordering::SeqCst);
     })
     .expect("TODO: panic message");
-
-
-
-
 
     //create runtime
     let mut rt = tokio::runtime::Runtime::new().unwrap();
@@ -217,7 +212,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                     let mut file = File::create(&file_path).unwrap();
 
-
                     // let mut file: Arc<Mutex<dyn OutputWriter>> = match simulation_config.output_type {
                     //     OutputType::CSV => Arc::new(Mutex::new(FileOutputWriter { file })),
                     //     OutputType::AVRO => {
@@ -225,10 +219,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     //     }
                     // };
 
-
                     // let mut file=  Arc::new(Mutex::new(AvroOutputWriter { file, schema: &schema }));
                     // let mut file=  Arc::new(Mutex::new(AvroOutputWriter::new(&schema, file)));
-                    let mut file=  Arc::new(Mutex::new(AvroOutputWriter::new(file)));
+                    let mut file = Arc::new(Mutex::new(AvroOutputWriter::new(file)));
 
                     // let mut file = Arc::new(Mutex::new(file));
 
@@ -257,24 +250,53 @@ fn main() -> Result<(), Box<dyn Error>> {
                             })
                             .collect();
                     let mut query_strings = vec![];
-                    //todo: add a check if the query is a join query
-                    
-                    
-                    for id in place_default_sources_on_node_ids
-                        .values()
-                        .flatten()
-                        .unique()
-                    {
-                        let input_replaced = query_string.replace("{INPUT}", &id.to_string());
-                        let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", id);
-                        let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
-                        let null_sink =
-                            input_replaced.replace("{SINK}", "NullOutputSinkDescriptor::create()");
-                        query_strings.push(tcp_sink);
-                        for _i in 0..experiment.input_config.parameters.query_duplication_factor {
-                            query_strings.push(null_sink.clone());
+
+                    if JOIN_QUERY {
+                        let mut source_count_map = HashMap::<String, u64>::new();
+
+                        for v in place_default_sources_on_node_ids.values().flatten() {
+
+                            let source_count = source_count_map.entry(v.clone()).or_insert(0);
+                            *source_count += 1;
+                        };
+
+                        for (k, c) in source_count_map.iter() {
+                        {
+                            //todo! reactivate this
+                            // assert_eq!(*c, 2);
+                            
+                            let input_replaced = query_string.replace("{INPUT1}", format!("{}s{}", k, 1).as_str());
+                            let input_replaced = input_replaced.replace("{INPUT2}", format!("{}s{}", k, 2).as_str());
+                            let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
+                            let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
+                            let null_sink = input_replaced
+                                .replace("{SINK}", "NullOutputSinkDescriptor::create()");
+                            query_strings.push(tcp_sink);
+                            for _i in 0..experiment.input_config.parameters.query_duplication_factor
+                            {
+                                query_strings.push(null_sink.clone());
+                            }
+                        }
+                        }
+                    } else {
+                        for id in place_default_sources_on_node_ids
+                            .values()
+                            .flatten()
+                            .unique()
+                        {
+                            let input_replaced = query_string.replace("{INPUT}", &id.to_string());
+                            let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", id);
+                            let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
+                            let null_sink = input_replaced
+                                .replace("{SINK}", "NullOutputSinkDescriptor::create()");
+                            query_strings.push(tcp_sink);
+                            for _i in 0..experiment.input_config.parameters.query_duplication_factor
+                            {
+                                query_strings.push(null_sink.clone());
+                            }
                         }
                     }
+                    dbg!(&query_strings);
                     std::thread::sleep(Duration::from_secs(10));
 
                     // Use the runtime

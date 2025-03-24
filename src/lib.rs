@@ -52,7 +52,7 @@ const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
 //const PORT_RANGE: std::ops::Range<u16> = 10_000..20_000;
 const PORT_RANGE: std::ops::Range<u16> = 7000..8000;
 
-const JOIN_QUERY: bool = true;
+pub const JOIN_QUERY: bool = true;
 
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -854,14 +854,14 @@ impl InputConfig {
             // place_default_sources_on_node_ids.into_iter().flat_map(|(k, v)| v.into_iter().map(move |x| format!("{}.{}", k.clone(), x))).collect_vec()
 
             let mut names = vec![];
-            
+
             let mut source_count_map = HashMap::<String, u64>::new();
-            
+
             for v in place_default_sources_on_node_ids.into_values().flatten() {
-                
+
                 let source_count = source_count_map.entry(v.clone()).or_insert(0);
                 *source_count += 1;
-                
+
                 names.push(format!("{}s{}", v, source_count));
             };
             names
