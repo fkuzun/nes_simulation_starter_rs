@@ -1448,6 +1448,7 @@ name = "simulation_runner_rs"
 version = "0.1.0"
 dependencies = [
  "avro-rs",
+ "byteorder",
  "chrono",
  "csv",
  "ctrlc",

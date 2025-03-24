@@ -125,6 +125,7 @@ fn generate_data(id: u64, sequence_nr: &mut u64, num_tuples: usize) -> std::io::
 
         // Concatenate all the bytes
         tuple_data.extend_from_slice(&id_bytes);
+        tuple_data.extend_from_slice(&sequence_bytes); //TODO: add function to calculate join id
         tuple_data.extend_from_slice(&sequence_bytes);
         tuple_data.extend_from_slice(&timestamp_bytes);
         *sequence_nr += 1;
