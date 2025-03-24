@@ -25,22 +25,6 @@ use tokio::task;
 use tokio::time::timeout;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let join_query = true;
-    let raw_schema = r#"
-                        {
-                            "type": "record",
-                            "name": "experiment_output",
-                            "fields": [
-                                {"name": "id", "type": "long"},
-                                {"name": "sequence_number", "type": "long"},
-                                {"name": "event_time", "type": "long"},
-                                {"name": "processing_time", "type": "long"},
-                                {"name": "emission_time", "type": "long"}
-                            ]
-                        }
-                        "#;
-    let schema = Schema::parse_str(raw_schema).unwrap();
-    //todo: read this from file
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 5 || args.len() > 8 {
@@ -273,6 +257,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                             })
                             .collect();
                     let mut query_strings = vec![];
+                    //todo: add a check if the query is a join query
+                    
+                    
                     for id in place_default_sources_on_node_ids
                         .values()
                         .flatten()

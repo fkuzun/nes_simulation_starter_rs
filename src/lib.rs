@@ -7,8 +7,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 
 use std::process::{Child, Command};
 use std::{fs, io, sync, time};
-
-
+use std::fmt::format;
 use std::fs::{File, read_to_string};
 use std::net::TcpListener;
 use std::ops::{Add, Deref, Range};
@@ -52,6 +51,8 @@ const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
 //const PORT_RANGE: std::ops::Range<u16> = 10_000..20_000;
 const PORT_RANGE: std::ops::Range<u16> = 7000..8000;
+
+const JOIN_QUERY: bool = true;
 
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -419,7 +420,7 @@ impl SimulationConfig {
         //let input_config_list = multi_simulation_config.generate_input_configs();
         println!("writing setups");
         let mut setups = vec![];
-        for (short_name, input_config, runs) in input_config_list {
+        for (short_name, mut input_config, runs) in input_config_list {
             let generated_folder = generated_main_folder.join(short_name);
             fs::create_dir_all(&generated_folder)?;
             let input_config_copy_path = generated_folder.join("input_config_copy.toml");
@@ -599,6 +600,8 @@ pub struct InputConfig {
     pub default_source_input: DefaultSourceInput,
     paths: Paths,
     //pub quadrant_config: Option<QuadrantConfig>,
+    #[serde(default)]
+    source_count_map: HashMap<String, u64>,
 }
 
 pub struct ExperimentSetup {
@@ -819,7 +822,7 @@ impl InputConfig {
     pub fn get_total_time(&self) -> Duration {
         self.parameters.deployment_time_offset + self.parameters.warmup + self.parameters.reconnect_runtime + self.parameters.cooldown_time + self.parameters.post_cooldown_time
     }
-    fn generate_output_config(&self, generated_folder: &Path) -> Result<ExperimentSetup, Box<dyn Error>> {
+    fn generate_output_config(&mut self, generated_folder: &Path) -> Result<ExperimentSetup, Box<dyn Error>> {
         println!("generating output config");
         // let input_trajectories_directory = &self.paths.mobile_trajectories_directory;
         let output_config_directory = generated_folder.join("config");
@@ -842,7 +845,31 @@ impl InputConfig {
         let place_default_sources_on_node_ids = fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
         let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
         let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
-        for name in place_default_sources_on_node_ids.values().flatten().unique() {
+        let names = if !JOIN_QUERY {
+            place_default_sources_on_node_ids.into_values().flatten().unique().collect_vec()
+        } else {
+            // place_default_sources_on_node_ids.values().flatten().collect_vec()
+            //place_default_sources_on_node_ids.into_iter().flat_map(|(k, v)| v.into_iter().map(|x| x.to_string())).collect_vec()
+            // place_default_sources_on_node_ids.into_iter().flat_map(|(k, v)| v.into_iter().map(move |x| format!("{}.{}", k.clone(), x))).collect_vec()
+            // place_default_sources_on_node_ids.into_iter().flat_map(|(k, v)| v.into_iter().map(move |x| format!("{}.{}", k.clone(), x))).collect_vec()
+
+            let mut names = vec![];
+            
+            let mut source_count_map = HashMap::<String, u64>::new();
+            
+            for v in place_default_sources_on_node_ids.into_values().flatten() {
+                
+                let source_count = source_count_map.entry(v.clone()).or_insert(0);
+                *source_count += 1;
+                
+                names.push(format!("{}s{}", v, source_count));
+            };
+            names
+        };
+        for n in &names {
+            println!("name: {}", n);
+        };
+        for name in names {
             // for name in &self.parameters.logical_source_names {
             logicalSources.push(LogicalSource {
                 logicalSourceName: name.to_string(),
@@ -1047,7 +1074,7 @@ impl InputConfig {
         })
     }
 
-    fn get_physical_sources_for_node(&self, numberOfTuplesToProducePerBuffer: u64, num_buffers: u128, total_number_of_tuples_to_ingest: &mut u64, input_id: u64) -> (Vec<PhysicalSource>, Option<u16>) {
+    fn get_physical_sources_for_node(&mut self, numberOfTuplesToProducePerBuffer: u64, num_buffers: u128, total_number_of_tuples_to_ingest: &mut u64, input_id: u64) -> (Vec<PhysicalSource>, Option<u16>) {
         let place_default_sources_on_node_ids = fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
         let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
         let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
@@ -1057,10 +1084,16 @@ impl InputConfig {
 
             //iterate over logical source names
             for (index, logical_source_name) in logical_source_names.iter().enumerate() {
+                //get the source count for this source group
+                let source_count = self.source_count_map.entry(logical_source_name.clone()).or_insert(0);
+                *source_count += 1;
+
                 *total_number_of_tuples_to_ingest += num_tuples;
                 // println!("{}, {}: raise number of tuples to ingest by {} to {}", index, logical_source_name, num_tuples, *total_number_of_tuples_to_ingest);
+                let logical_source_name = format!("{}s{}", logical_source_name, source_count);
+                println!("{}", logical_source_name);
                 sources.push(PhysicalSource {
-                    logicalSourceName: logical_source_name.to_string(),
+                    logicalSourceName: logical_source_name,
                     physicalSourceName: format!("physical_{}", index).to_owned(),
                     Type: PhysicalSourceType::CSV_SOURCE,
                     configuration: PhysicalSourceConfiguration {
