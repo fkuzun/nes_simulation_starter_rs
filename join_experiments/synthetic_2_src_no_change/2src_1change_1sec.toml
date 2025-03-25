@@ -1,0 +1,75 @@
+enable_query_reconfiguration = [false]
+#enable_query_reconfiguration = [true,false]
+enable_proactive_deployment = [false]
+#tuples_per_buffer = [200, 400, 800]
+tuples_per_buffer = [1]
+#tuples_per_buffer = [50]
+#tuples_per_buffer = [150]
+#tuples_per_buffer = [10]
+#gathering_interval = [1, 5, 10]
+gathering_interval = [100]
+speedup_factor = [1]
+#placementAmendmentThreadCount = [1, 8]
+#placementAmendmentThreadCount = [1,8]
+placementAmendmentThreadCount = [1]
+
+[default_config.parameters]
+#query_duplication_factor = 9
+query_duplication_factor = 0
+placementAmendmentThreadCount = 8
+reconnect_start_offset = 40
+amount_of_reconnects = 10
+speedup_factor = 1.0
+deployment_time_offset = 20
+warmup = 10
+#reconnect_runtime = 30
+reconnect_runtime = 10
+cooldown_time = 10
+post_cooldown_time = 10
+#post_cooldown_time = 60
+enable_query_reconfiguration = true
+enable_proactive_deployment = true
+reconnect_input_type = "LIVE"
+source_input_server_port = 9999
+#query_string = "Query::from(\"{INPUT}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"values0:{OUTPUT}\", \"CSV_FORMAT\", \"true\"));"
+#query_string = "Query::from(\"{INPUT}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink(FileSinkDescriptor::create(\"{INPUT}:{OUTPUT}\", \"CSV_FORMAT\", \"true\"));"
+#query_string = "Query::from(\"{INPUT}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).sink({SINK});"
+#query_string = "Query::from(\"{INPUT1}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).unionWith(Query::from(\"{INPUT2}\").map(Attribute(\"value\") = Attribute(\"value\") * 2)).sink({SINK});"
+#query_string = "Query::from(\"{INPUT1}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).joinWith(Query::from(\"{INPUT2}\").map(Attribute(\"value\") = Attribute(\"value\") * 2)).where(Attribute(\"value\")).equalsTo(Attribute(\"value\")).window(TumblingWindow::of(EventTime(Attribute(\"event_timestamp\")), Seconds(1))).sink({SINK});"
+#query_string = "Query::from(\"{INPUT1}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).joinWith(Query::from(\"{INPUT2}\").map(Attribute(\"value\") = Attribute(\"value\") * 2)).where(Attribute(\"value\") == Attribute(\"value\")).window(TumblingWindow::of(EventTime(Attribute(\"event_timestamp\")), Seconds(1))).sink({SINK});"
+#query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Seconds(1))).sink({SINK});"
+query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Milliseconds(10))).sink({SINK});"
+
+#place_default_sources_on_node_ids_path = "/data/ankit/relative_paths/quadrants/s41_s42_2h_60s_every1s_4sources_per_query/source_groups.json"
+#place_default_sources_on_node_ids_path = "/data/ankit/relative_paths/quadrants/august24/s41_s42_20m_10sbatch_4source/source_groups.json"
+place_default_sources_on_node_ids_path = "/home/x/rustProjects/nes_simulation_starter_rs/join_experiments/synthetic_2_src_no_change/source_groups.json"
+
+num_worker_threads = 1
+
+
+[default_config.default_source_input]
+tuples_per_buffer = 0
+gathering_interval = 0
+source_input_method = "TCP"
+
+[default_config.paths]
+
+#fixed_topology_nodes = "/home/x/uni/ba/experiments/nes_experiment_input/3_layer_topology_25_nodes.json"
+#fixed_topology_nodes = "3_layer_topology_25_nodes_actual_ids.json"
+fixed_topology_nodes = "fixed_topology.json"
+# todo: rename the following as it is not a directory anymore
+#mobile_trajectories_directory = "/home/x/uni/ba/experiments/nes_experiment_input/1h_single_dublin_bus"
+#mobile_trajectories_directory = "/home/x/uni/ba/experiments/nes_experiment_input/1h_dublin_bus_nanosec"
+#mobile_trajectories_directory = "/home/x/uni/ba/experiments/nes_experiment_input/1_mobile_worker_explicit_reconnects_to_non_source_hosting_nodes"
+#mobile_trajectories_directory.TrajectoriesDir = "1_mobile_worker_explicit_reconnects_to_non_source_hosting_nodes_1_sec_interval_25_fixed"
+
+#[default_config.paths.mobile_trajectories_directory.Quadrants]
+#num_quadrants = 10
+#devices_per_quadrant = 2
+##devices_per_quadrant = 2
+#quadrant_start_id = 2
+#mobile_start_id = 12
+
+[default_config.paths.mobile_trajectories_directory]
+#TrajectoriesDir = "topology_updates.json"
+TrajectoriesDir = "."
