@@ -8,7 +8,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 fn main() -> std::io::Result<()> {
     // Parse environment variables
     let args: Vec<String> = env::args().collect();
-    if args.len() != 8 {
+    if args.len() < 7 {
         eprintln!("Usage: {} <hostname> <port> <num_buffers> <buffer_size> <gathering_interval> <join_match_interval (optional)>", args[0]);
         std::process::exit(1);
     }
@@ -17,8 +17,9 @@ fn main() -> std::io::Result<()> {
     let num_buffers = args[3].parse::<usize>().expect("Invalid number of buffers");
     let buffer_size = args[4].parse::<usize>().expect("Invalid buffer size");
     let gathering_interval = args[5].parse::<u64>().expect("Invalid gathering interval");
-    let join_match_interval = args[6].parse::<u64>().unwrap_or(1);
     let deadline = std::time::Duration::from_millis(args[6].parse::<u64>().expect("Invalid deadline"));
+    // let join_match_interval = args[7].parse::<u64>().unwrap_or(1);
+    let join_match_interval = 7;
 
     // Create a TCP listener bound to a specific address and port
     let listener = match TcpListener::bind((hostname, port)) {
@@ -120,8 +121,8 @@ fn generate_data(id: u64, sequence_nr: &mut u64, num_tuples: usize, join_match_i
             .duration_since(UNIX_EPOCH).unwrap()
             .as_nanos() as u64; // Get current timestamp in milliseconds
 
-        let join_id = if *sequence_nr % 2 == 0 {
-            *sequence_nr
+        let join_id = if *sequence_nr % join_match_interval == 0 {
+            *sequence_nr * 1000
         } else {
             id
         };

@@ -577,6 +577,7 @@ pub struct Parameters {
     pub num_worker_threads: u64,
     placementAmendmentThreadCount: u16,
     pub query_duplication_factor: usize,
+    pub join_match_interval: u64,
 }
 
 #[serde_as]
@@ -2175,22 +2176,13 @@ fn get_expected_join_output_count(
     join_match_interval: u64,
 ) -> u64 {
     let num_tuples = num_tuples / 2; //we have two sources feeding into the same join
-    let subtract_amount = num_tuples % window_size; //last window might not be full
-
-    //tuple on the boundary will trigger new window but not be part of the output
-    let subtract_amount = if subtract_amount == 0 {
-        1
-    } else {
-        subtract_amount
-    };
-
-    let expected_output_count = (num_tuples - subtract_amount); //subtract the tuples that are not part of the output
-    let expected_output_count = expected_output_count + 1; //we start counting at 0, so add one
-    let expected_output_count =
-        expected_output_count - (expected_output_count % join_match_interval);
-    let expected_output_count = expected_output_count / join_match_interval;
-
-    expected_output_count
+    let finished_windows = num_tuples / window_size;
+    println!("finished windows: {}", finished_windows);
+    let processed_tuples = finished_windows * window_size;
+    println!("processed tuples: {}", processed_tuples);
+    let matchted_tuples = processed_tuples / join_match_interval;
+    println!("matched tuples: {}", matchted_tuples);
+    matchted_tuples
 }
 
 #[cfg(test)]
@@ -2206,10 +2198,10 @@ mod tests {
     #[test]
     fn test_tuple_count_calculation() {
         let num_tuples = 600;
-        let window_size = 10;
-        let join_match_interval = 2;
+        let window_size = 40;
+        let join_match_interval = 7;
         let expected_output_count =
             get_expected_join_output_count(num_tuples, window_size, join_match_interval);
-        assert_eq!(expected_output_count, 150);
+        assert_eq!(expected_output_count, 140);
     }
 }
