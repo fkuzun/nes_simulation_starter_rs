@@ -1,51 +1,52 @@
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::error::Error;
 
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader, Cursor, Read, Write};
-use byteorder::{LittleEndian, ReadBytesExt};
 
-use std::process::{Child, Command};
-use std::{fs, io, sync, time};
 use std::fmt::format;
-use std::fs::{File, read_to_string};
+use std::fs::{read_to_string, File};
 use std::net::TcpListener;
 use std::ops::{Add, Deref, Range};
+use std::process::{Child, Command};
+use std::{fs, io, sync, time};
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::path::Path;
+use std::path::PathBuf;
 
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::atomic::Ordering::SeqCst;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime};
-use avro_rs::{Schema, Writer};
-use avro_rs::types::Record;
-use chrono::Local;
-use futures::AsyncWriteExt;
-use nes_tools::launch::Launch;
-use nes_tools::query::SubmitQueryResponse;
-use nes_tools::topology::{AddEdgeReply, AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType};
-use serde_with::serde_as;
-use yaml_rust::{YamlEmitter, YamlLoader};
+use crate::rest_node_relocation::TopologyUpdate;
 use crate::FieldType::UINT64;
 use crate::WorkerConfigType::Fixed;
+use avro_rs::types::Record;
+use avro_rs::{Schema, Writer};
+use chrono::Local;
+use futures::AsyncWriteExt;
+use itertools::Itertools;
+use nes_tools::launch::Launch;
+use nes_tools::query::SubmitQueryResponse;
+use nes_tools::topology::{
+    AddEdgeReply, AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType,
+};
+use regex::Regex;
+use relative_path::RelativePathBuf;
+use serde_with::serde_as;
 use serde_with::DurationMilliSeconds;
 use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
+use std::sync::atomic::Ordering::SeqCst;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::sleep;
+use std::time::{Duration, SystemTime};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt};
-use regex::Regex;
-use relative_path::RelativePathBuf;
-use itertools::Itertools;
-use crate::rest_node_relocation::TopologyUpdate;
-
+use yaml_rust::{YamlEmitter, YamlLoader};
 
 pub mod analyze;
 
-pub mod rest_node_relocation;
 mod MobileDeviceQuadrants;
+pub mod rest_node_relocation;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
@@ -53,7 +54,6 @@ const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
 const PORT_RANGE: std::ops::Range<u16> = 7000..8000;
 
 pub const JOIN_QUERY: bool = true;
-
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SimulatedReconnects {
@@ -86,7 +86,6 @@ impl SimulatedReconnects {
     }
 }
 
-
 fn get_available_port(mut range: Range<u16>) -> Option<u16> {
     range.find(|port| port_is_available(*port))
 }
@@ -109,8 +108,13 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
             parent_id: *parent_id,
             child_id: *child_id,
         };
-        let result = client.post(format!("http://127.0.0.1:{}/v1/nes/topology/addAsChild", &rest_port.to_string()))
-            .json(&link_request).send()?;
+        let result = client
+            .post(format!(
+                "http://127.0.0.1:{}/v1/nes/topology/addAsChild",
+                &rest_port.to_string()
+            ))
+            .json(&link_request)
+            .send()?;
         //println!("{}", result.text().unwrap());
         let reply: AddEdgeReply = result.json()?;
         if !reply.success {
@@ -120,14 +124,16 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
             parent_id: 1,
             child_id: *child_id,
         };
-        let result = client.delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
-            .json(&link_request).send()?;
+        let result = client
+            .delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
+            .json(&link_request)
+            .send()?;
         //assert!(result.json().unwrap());
         let reply: AddEdgeReply = result.json()?;
         if !reply.success {
             return Err("Could not add edge".into());
         }
-    };
+    }
     Ok(())
 }
 
@@ -190,10 +196,18 @@ impl MultiSimulationInputConfig {
     }
 
     pub fn get_short_name_with_value(&self, short_name: &str, value: &str) -> String {
-        format!("{}{}{}", short_name, self.get_short_name_value_separator(), value)
+        format!(
+            "{}{}{}",
+            short_name,
+            self.get_short_name_value_separator(),
+            value
+        )
     }
 
-    pub fn generate_input_configs(&self, number_of_runs: u64) -> Vec<(String, InputConfig, Vec<u64>)> {
+    pub fn generate_input_configs(
+        &self,
+        number_of_runs: u64,
+    ) -> Vec<(String, InputConfig, Vec<u64>)> {
         let mut configs = vec![];
         //let mut source_input_server_port = START_OF_SOURCE_INPUT_SERVER_PORT_RANGE;
         for &enable_query_reconfiguration in &self.enable_query_reconfiguration {
@@ -205,8 +219,12 @@ impl MultiSimulationInputConfig {
                 for &tuples_per_buffer in &self.tuples_per_buffer {
                     for &gathering_interval in &self.gathering_interval {
                         for &speedup_factor in &self.speedup_factor {
-                            for &placementAmendmentThreadCount in &self.placementAmendmentThreadCount {
-                                if enable_query_reconfiguration && placementAmendmentThreadCount == 1 {
+                            for &placementAmendmentThreadCount in
+                                &self.placementAmendmentThreadCount
+                            {
+                                if enable_query_reconfiguration
+                                    && placementAmendmentThreadCount == 1
+                                {
                                     println!("skipping config with reconfiguration enabled and only one amendment thread");
                                     continue;
                                 }
@@ -228,17 +246,35 @@ impl MultiSimulationInputConfig {
                                 };
 
                                 //source_input_server_port += 1;
-                                let mut short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
+                                let mut short_name = self.get_short_name_with_value(
+                                    &self.get_reconfig_short_name(),
+                                    &enable_query_reconfiguration.to_string(),
+                                );
                                 short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(&self.get_proactive_short_name(), &enable_proactive_deployment.to_string()));
+                                short_name.push_str(&self.get_short_name_with_value(
+                                    &self.get_proactive_short_name(),
+                                    &enable_proactive_deployment.to_string(),
+                                ));
                                 short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(&self.get_tuples_per_buffer_short_name(), &tuples_per_buffer.to_string()));
+                                short_name.push_str(&self.get_short_name_with_value(
+                                    &self.get_tuples_per_buffer_short_name(),
+                                    &tuples_per_buffer.to_string(),
+                                ));
                                 short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(&self.get_gathering_interval_short_name(), &gathering_interval.as_millis().to_string()));
+                                short_name.push_str(&self.get_short_name_with_value(
+                                    &self.get_gathering_interval_short_name(),
+                                    &gathering_interval.as_millis().to_string(),
+                                ));
                                 short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(&self.get_speedup_short_name(), &speedup_factor.to_string()));
+                                short_name.push_str(&self.get_short_name_with_value(
+                                    &self.get_speedup_short_name(),
+                                    &speedup_factor.to_string(),
+                                ));
                                 short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(&self.get_amnenment_threads_short_name(), &placementAmendmentThreadCount.to_string()));
+                                short_name.push_str(&self.get_short_name_with_value(
+                                    &self.get_amnenment_threads_short_name(),
+                                    &placementAmendmentThreadCount.to_string(),
+                                ));
                                 configs.push((short_name, config, (0..number_of_runs).collect()));
                             }
                         }
@@ -254,7 +290,7 @@ impl MultiSimulationInputConfig {
             // };
             // let short_name = self.get_short_name_with_value(&self.get_reconfig_short_name(), &enable_query_reconfiguration.to_string());
             // configs.push((short_name, config));
-        };
+        }
         configs
     }
 }
@@ -273,11 +309,16 @@ pub struct SimulationConfig {
 impl SimulationConfig {
     //get the absolute path to the analysis script defined in the multisimulation config file
     pub fn get_analysis_script_path(&self) -> Option<PathBuf> {
-        let multi_conf = MultiSimulationInputConfig::read_input_from_file(&self.input_config_path).expect("could not read multi simulation config file");
+        let multi_conf = MultiSimulationInputConfig::read_input_from_file(&self.input_config_path)
+            .expect("could not read multi simulation config file");
         if let Some(script_path) = &multi_conf.analysis_script {
             // let mut path = self.input_config_path.clone();
             // path.to_path_buf();
-            let abs_path = script_path.to_path(self.input_config_path.parent().expect("could not get parent path of input config file"));
+            let abs_path = script_path.to_path(
+                self.input_config_path
+                    .parent()
+                    .expect("could not get parent path of input config file"),
+            );
             if abs_path.exists() {
                 Some(abs_path)
             } else {
@@ -287,7 +328,6 @@ impl SimulationConfig {
             None
         }
     }
-
 
     // fn get_input_folder_path(&self) -> PathBuf {
     //     let mut path = self.experiment_directory.clone();
@@ -304,24 +344,43 @@ impl SimulationConfig {
     }
 
     fn read_input_config(&self) -> InputConfig {
-        let input_config: InputConfig = toml::from_str(&*read_to_string(&self.get_input_config_path()).expect("Could not read config file")).expect("could not parse config file");
+        let input_config: InputConfig = toml::from_str(
+            &*read_to_string(&self.get_input_config_path()).expect("Could not read config file"),
+        )
+        .expect("could not parse config file");
         input_config
     }
 
     fn read_multi_simulation_input_config(&self) -> MultiSimulationInputConfig {
         let file_path = self.get_input_config_path();
-        let mut input_config: MultiSimulationInputConfig = toml::from_str(&read_to_string(&file_path).expect("Could not read config file")).expect("could not parse config file");
-        input_config.default_config.paths.set_base_path(file_path.parent().expect("could not get parent path of input config file").to_owned());
+        let mut input_config: MultiSimulationInputConfig =
+            toml::from_str(&read_to_string(&file_path).expect("Could not read config file"))
+                .expect("could not parse config file");
+        input_config.default_config.paths.set_base_path(
+            file_path
+                .parent()
+                .expect("could not get parent path of input config file")
+                .to_owned(),
+        );
         input_config
     }
 
     fn create_generated_folder(&self) -> PathBuf {
         //create_folder_with_timestamp(self.experiment_directory.clone(), "generated_experiment_")
-        create_folder_with_timestamp(self.output_directory.clone(), self.input_config_path.file_name().unwrap().to_str().unwrap())
+        create_folder_with_timestamp(
+            self.output_directory.clone(),
+            self.input_config_path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        )
     }
 
-    pub fn generate_retrials(&self, number_of_runs: u64) -> Result<Vec<(String, InputConfig, Vec<u64>)>, Box<dyn Error>> {
-
+    pub fn generate_retrials(
+        &self,
+        number_of_runs: u64,
+    ) -> Result<Vec<(String, InputConfig, Vec<u64>)>, Box<dyn Error>> {
         //iterate over all subfolders in retrial path and check for tuple_count files
         let mut setups = vec![];
         let re = Regex::new(r"out_run:(\d+)\.csvtuple_count\.csv").unwrap();
@@ -381,11 +440,17 @@ impl SimulationConfig {
                     let config_path = path.join("input_config_copy.toml");
 
                     println!("Adding config");
-                    let input_config = read_to_string(&config_path).expect("Could not read config file");
+                    let input_config =
+                        read_to_string(&config_path).expect("Could not read config file");
                     println!("{:?}", input_config);
-                    let mut input_config: InputConfig = toml::from_str(&*input_config).expect("could not parse config file");
+                    let mut input_config: InputConfig =
+                        toml::from_str(&*input_config).expect("could not parse config file");
                     input_config.paths.set_base_path(path);
-                    setups.push((entry.file_name().to_str().unwrap().to_string(), input_config, runs_to_repeat));
+                    setups.push((
+                        entry.file_name().to_str().unwrap().to_string(),
+                        input_config,
+                        runs_to_repeat,
+                    ));
                 }
             }
         }
@@ -404,18 +469,35 @@ impl SimulationConfig {
         Ok(setups)
     }
 
-    pub fn generate_experiment_configs(&self, number_of_runs: u64) -> Result<Vec<(ExperimentSetup, Vec<u64>)>, Box<dyn Error>> {
+    pub fn generate_experiment_configs(
+        &self,
+        number_of_runs: u64,
+    ) -> Result<Vec<(ExperimentSetup, Vec<u64>)>, Box<dyn Error>> {
         let (generated_main_folder, input_config_list) = if self.run_for_retrial_path.is_some() {
             println!("rerun");
-            let folder_prefix = self.run_for_retrial_path.as_ref().unwrap().file_name().unwrap().to_str().unwrap();
-            let generated_main_folder = create_folder_with_timestamp(self.output_directory.clone(), folder_prefix);
-            (generated_main_folder, self.generate_retrials(number_of_runs)?)
+            let folder_prefix = self
+                .run_for_retrial_path
+                .as_ref()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap();
+            let generated_main_folder =
+                create_folder_with_timestamp(self.output_directory.clone(), folder_prefix);
+            (
+                generated_main_folder,
+                self.generate_retrials(number_of_runs)?,
+            )
         } else {
             println!("generate new run");
             let generated_main_folder = self.create_generated_folder();
             //let input_config = self.read_input_config();
             let multi_simulation_config = self.read_multi_simulation_input_config();
-            (generated_main_folder, multi_simulation_config.generate_input_configs(number_of_runs))
+            (
+                generated_main_folder,
+                multi_simulation_config.generate_input_configs(number_of_runs),
+            )
         };
         //let input_config_list = multi_simulation_config.generate_input_configs();
         println!("writing setups");
@@ -432,7 +514,10 @@ impl SimulationConfig {
             // let mut config_path = generated_folder.clone();
             // config_path.push("config/trajectory");
             // input_config.paths.set_base_path(config_path);
-            setups.push((input_config.generate_output_config(&generated_folder)?, runs));
+            setups.push((
+                input_config.generate_output_config(&generated_folder)?,
+                runs,
+            ));
         }
         Ok(setups)
         // let input_config_copy_path = generated_folder.join("input_config_copy.toml");
@@ -443,7 +528,6 @@ impl SimulationConfig {
         // input_config.generate_output_config(&generated_folder)
     }
 }
-
 
 pub struct NesExecutablePaths {
     pub worker_path: PathBuf,
@@ -462,7 +546,6 @@ impl NesExecutablePaths {
         }
     }
 }
-
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -496,7 +579,6 @@ pub struct Parameters {
     pub query_duplication_factor: usize,
 }
 
-
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DefaultSourceInput {
@@ -511,7 +593,6 @@ pub enum SourceInputMethod {
     CSV,
     TCP,
 }
-
 
 use serde::Deserializer;
 
@@ -529,10 +610,10 @@ where
 }
 
 pub mod config {
-    use std::path::PathBuf;
+    use crate::MobileDeviceQuadrants::QuadrantConfig;
     use relative_path::RelativePathBuf;
     use serde::{Deserialize, Serialize};
-    use crate::MobileDeviceQuadrants::QuadrantConfig;
+    use std::path::PathBuf;
 
     #[derive(Debug, Deserialize, Serialize, Clone)]
     pub struct Paths {
@@ -550,12 +631,12 @@ pub mod config {
         Quadrants(QuadrantConfig),
         #[serde(deserialize_with = "super::deserialize_relative_path")]
         TrajectoriesDir(RelativePathBuf),
-
     }
 
     impl Paths {
         pub fn get_fixed_topology_nodes_path(&self) -> PathBuf {
-            self.fixed_topology_nodes.to_path(self.base_path.as_ref().expect("base path not set"))
+            self.fixed_topology_nodes
+                .to_path(self.base_path.as_ref().expect("base path not set"))
         }
 
         pub fn get_fixed_topology_nodes_path_relative(&self) -> PathBuf {
@@ -573,7 +654,9 @@ pub mod config {
             if let MobileTopologyInput::TrajectoriesDir(dir) = &self.mobile_trajectories_directory {
                 Some(dir.to_path(self.base_path.as_ref().expect("base path not set")))
             } else {
-                println!("cannot get path for non directory input type because quadrant method is used");
+                println!(
+                    "cannot get path for non directory input type because quadrant method is used"
+                );
                 None
             }
         }
@@ -632,23 +715,29 @@ pub struct ReconnectList {
     pub timestamps: Vec<Vec<u64>>,
 }
 
-
 pub fn get_reconnect_list(rest_port: u16) -> Result<ReconnectList, Box<dyn Error>> {
     let client = reqwest::blocking::Client::new();
-    let result = client.get(format!("http://localhost:{}/v1/nes/query/reconnects", &rest_port.to_string())).send()?;
+    let result = client
+        .get(format!(
+            "http://localhost:{}/v1/nes/query/reconnects",
+            &rest_port.to_string()
+        ))
+        .send()?;
     //println!("list: {:?}", &result.text().unwrap());
     let reply: Vec<Vec<u64>> = result.json()?;
     //println!("received reconnect list:");
     println!("list: {:?}", reply);
     // Ok(reply)
-    Ok(
-        ReconnectList {
-            timestamps: reply
-        })
+    Ok(ReconnectList { timestamps: reply })
 }
 
 impl ExperimentSetup {
-    pub fn start(&mut self, executable_paths: &NesExecutablePaths, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
+    pub fn start(
+        &mut self,
+        executable_paths: &NesExecutablePaths,
+        shutdown_triggered: Arc<AtomicBool>,
+        log_level: &LogLevel,
+    ) -> Result<(), Box<dyn Error>> {
         self.kill_processes();
         self.fixed_worker_processes = vec![];
         self.mobile_worker_processes = vec![];
@@ -656,16 +745,29 @@ impl ExperimentSetup {
         //let rest_port = get_available_port(PORT_RANGE).ok_or("Could not find available port")?;
         let rest_port = 8081;
 
-        self.start_coordinator(&executable_paths.coordinator_path, Arc::clone(&shutdown_triggered), rest_port, &log_level)?;
+        self.start_coordinator(
+            &executable_paths.coordinator_path,
+            Arc::clone(&shutdown_triggered),
+            rest_port,
+            &log_level,
+        )?;
 
         wait_for_topology(Some(1), Arc::clone(&shutdown_triggered), rest_port)?;
         // wait_for_topology(Some(2), Arc::clone(&shutdown_triggered), rest_port)?;
 
         println!("starting fixed workers");
-        self.start_fixed_workers(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
+        self.start_fixed_workers(
+            &executable_paths.worker_path,
+            Arc::clone(&shutdown_triggered),
+            &log_level,
+        )?;
 
         println!("wait for fixed workers");
-        wait_for_topology(Some(self.fixed_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
+        wait_for_topology(
+            Some(self.fixed_worker_processes.len() + 1),
+            Arc::clone(&shutdown_triggered),
+            rest_port,
+        )?;
         //wait_for_topology(Some(self.fixed_worker_processes.len() + 1 + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
         println!("adding fixed edges");
@@ -675,19 +777,29 @@ impl ExperimentSetup {
         // println!("press any key to start mobile workers");
         // let input: String = text_io::read!("{}\n");
 
-
         println!("starting mobile workers");
-        self.start_mobile(&executable_paths.worker_path, Arc::clone(&shutdown_triggered), &log_level)?;
+        self.start_mobile(
+            &executable_paths.worker_path,
+            Arc::clone(&shutdown_triggered),
+            &log_level,
+        )?;
 
         println!("waiting for mobile workers to be online");
         sleep(Duration::from_secs(7));
-        wait_for_topology(Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1), Arc::clone(&shutdown_triggered), rest_port)?;
+        wait_for_topology(
+            Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1),
+            Arc::clone(&shutdown_triggered),
+            rest_port,
+        )?;
         println!("mobile workers are online");
 
         Ok(())
     }
 
-    pub fn submit_queries(output_port: u16, query_strings: Vec<String>) -> Result<(), Box<dyn Error>> {
+    pub fn submit_queries(
+        output_port: u16,
+        query_strings: Vec<String>,
+    ) -> Result<(), Box<dyn Error>> {
         for query_string in query_strings {
             Self::submit_query(output_port, query_string)?;
         }
@@ -719,8 +831,10 @@ impl ExperimentSetup {
             placement: PlacementStrategyType::BottomUp,
         };
         let client = reqwest::blocking::Client::new();
-        let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-query")
-            .json(&execute_query_request).send()?;
+        let result = client
+            .post("http://127.0.0.1:8081/v1/nes/query/execute-query")
+            .json(&execute_query_request)
+            .send()?;
         let reply: SubmitQueryResponse = result.json()?;
         if reply.queryId == 0 {
             return Err("Could not submit query, received invalid query id 0".into());
@@ -733,7 +847,6 @@ impl ExperimentSetup {
         add_edges_from_list(&rest_port, edges)
     }
 
-
     pub fn kill_processes(&mut self) -> Result<(), Box<dyn Error>> {
         for mobile_worker in &mut self.mobile_worker_processes {
             println!("killing mobile worker");
@@ -745,17 +858,22 @@ impl ExperimentSetup {
         }
         //kill coordinator
         match self.coordinator_process.take() {
-            None => { println!("coordinator process not found") }
-            Some(mut p) => { p.kill()? }
+            None => {
+                println!("coordinator process not found")
+            }
+            Some(mut p) => p.kill()?,
         }
-
 
         //.ok_or("Coordinator process not found")?.kill()?;
         Ok(())
     }
 
-
-    fn start_fixed_workers(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
+    fn start_fixed_workers(
+        &mut self,
+        worker_path: &Path,
+        shutdown_triggered: Arc<AtomicBool>,
+        log_level: &LogLevel,
+    ) -> Result<(), Box<dyn Error>> {
         for path in &self.fixed_config_paths {
             sleep(Duration::from_millis(200));
             if shutdown_triggered.load(Ordering::SeqCst) {
@@ -763,16 +881,24 @@ impl ExperimentSetup {
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
-                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
+                .arg(format!(
+                    "--logLevel={}",
+                    &serde_json::to_string(log_level).unwrap().trim_matches('\"')
+                ))
                 //.arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
 
             self.fixed_worker_processes.push(process);
-        };
+        }
         Ok(())
     }
 
-    fn start_mobile(&mut self, worker_path: &Path, shutdown_triggered: Arc<AtomicBool>, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
+    fn start_mobile(
+        &mut self,
+        worker_path: &Path,
+        shutdown_triggered: Arc<AtomicBool>,
+        log_level: &LogLevel,
+    ) -> Result<(), Box<dyn Error>> {
         for path in &self.mobile_config_paths {
             sleep(Duration::from_millis(200));
             if shutdown_triggered.load(Ordering::SeqCst) {
@@ -780,22 +906,39 @@ impl ExperimentSetup {
             }
             let process = Command::new(worker_path)
                 .arg(format!("--configPath={}", path.display()))
-                .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
+                .arg(format!(
+                    "--logLevel={}",
+                    &serde_json::to_string(log_level).unwrap().trim_matches('\"')
+                ))
                 //.arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
             self.fixed_worker_processes.push(process);
-        };
+        }
         Ok(())
     }
 
-    fn start_coordinator(&mut self, coordinator_path: &Path, shutdown_triggered: Arc<AtomicBool>, _rest_port: u16, log_level: &LogLevel) -> Result<(), Box<dyn Error>> {
-        self.coordinator_process = Some(Command::new(&coordinator_path)
-            .arg("--restServerCorsAllowedOrigin=*")
-            .arg(format!("--configPath={}", self.output_coordinator_config_path.display()))
-            //.arg(format!("--restPort={}", &rest_port.to_string()))
-            .arg(format!("--logLevel={}", &serde_json::to_string(log_level).unwrap().trim_matches('\"')))
-            //.arg("--logLevel=LOG_DEBUG")
-            .spawn()?);
+    fn start_coordinator(
+        &mut self,
+        coordinator_path: &Path,
+        shutdown_triggered: Arc<AtomicBool>,
+        _rest_port: u16,
+        log_level: &LogLevel,
+    ) -> Result<(), Box<dyn Error>> {
+        self.coordinator_process = Some(
+            Command::new(&coordinator_path)
+                .arg("--restServerCorsAllowedOrigin=*")
+                .arg(format!(
+                    "--configPath={}",
+                    self.output_coordinator_config_path.display()
+                ))
+                //.arg(format!("--restPort={}", &rest_port.to_string()))
+                .arg(format!(
+                    "--logLevel={}",
+                    &serde_json::to_string(log_level).unwrap().trim_matches('\"')
+                ))
+                //.arg("--logLevel=LOG_DEBUG")
+                .spawn()?,
+        );
 
         std::thread::sleep(time::Duration::from_secs(5));
         //wait until coordinator is online
@@ -820,9 +963,16 @@ impl InputConfig {
         self.parameters.warmup + self.parameters.reconnect_runtime + self.parameters.cooldown_time
     }
     pub fn get_total_time(&self) -> Duration {
-        self.parameters.deployment_time_offset + self.parameters.warmup + self.parameters.reconnect_runtime + self.parameters.cooldown_time + self.parameters.post_cooldown_time
+        self.parameters.deployment_time_offset
+            + self.parameters.warmup
+            + self.parameters.reconnect_runtime
+            + self.parameters.cooldown_time
+            + self.parameters.post_cooldown_time
     }
-    fn generate_output_config(&mut self, generated_folder: &Path) -> Result<ExperimentSetup, Box<dyn Error>> {
+    fn generate_output_config(
+        &mut self,
+        generated_folder: &Path,
+    ) -> Result<ExperimentSetup, Box<dyn Error>> {
         println!("generating output config");
         // let input_trajectories_directory = &self.paths.mobile_trajectories_directory;
         let output_config_directory = generated_folder.join("config");
@@ -833,8 +983,10 @@ impl InputConfig {
         fs::create_dir_all(&output_trajectory_directory).expect("Failed to create folder");
         let output_worker_config_directory = output_config_directory.join("worker_config");
         fs::create_dir_all(&output_worker_config_directory).expect("Failed to create folder");
-        let output_coordinator_config_path = output_config_directory.join("coordinator_config.yaml");
-        let output_topology_path = generated_folder.join(self.paths.get_fixed_topology_nodes_path_relative());
+        let output_coordinator_config_path =
+            output_config_directory.join("coordinator_config.yaml");
+        let output_topology_path =
+            generated_folder.join(self.paths.get_fixed_topology_nodes_path_relative());
         //let sink_output_path = generated_folder.join("out.csv");
         //todo: set port here
         let sink_output_path = generated_folder.join("replace_me.csv");
@@ -842,11 +994,28 @@ impl InputConfig {
         let mut logicalSources = vec![];
 
         println!("generating logical sources");
-        let place_default_sources_on_node_ids = fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
-        let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
-        let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
+        let place_default_sources_on_node_ids =
+            fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path)
+                .expect("Failed to read place_default_sources_on_node_ids");
+        let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> =
+            serde_json::from_str(&place_default_sources_on_node_ids)
+                .expect("could not parse map of sourcees to nodes");
+        let place_default_sources_on_node_ids: HashMap<String, Vec<String>> =
+            place_default_sources_on_node_ids
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.to_string(),
+                        v.clone().iter().map(|x| x.to_string()).collect(),
+                    )
+                })
+                .collect();
         let names = if !JOIN_QUERY {
-            place_default_sources_on_node_ids.into_values().flatten().unique().collect_vec()
+            place_default_sources_on_node_ids
+                .into_values()
+                .flatten()
+                .unique()
+                .collect_vec()
         } else {
             // place_default_sources_on_node_ids.values().flatten().collect_vec()
             //place_default_sources_on_node_ids.into_iter().flat_map(|(k, v)| v.into_iter().map(|x| x.to_string())).collect_vec()
@@ -858,17 +1027,16 @@ impl InputConfig {
             let mut source_count_map = HashMap::<String, u64>::new();
 
             for v in place_default_sources_on_node_ids.into_values().flatten() {
-
                 let source_count = source_count_map.entry(v.clone()).or_insert(0);
                 *source_count += 1;
 
                 names.push(format!("{}s{}", v, source_count));
-            };
+            }
             names
         };
         for n in &names {
             println!("name: {}", n);
-        };
+        }
         for name in names {
             // for name in &self.parameters.logical_source_names {
             logicalSources.push(LogicalSource {
@@ -915,29 +1083,37 @@ impl InputConfig {
         };
         coordinator_config.write_to_file(&output_coordinator_config_path)?;
 
-        println!("reading fixed topology: {}", self.paths.get_fixed_topology_nodes_path().to_str().unwrap());
+        println!(
+            "reading fixed topology: {}",
+            self.paths.get_fixed_topology_nodes_path().to_str().unwrap()
+        );
         //start fixed workers
         let json_string = std::fs::read_to_string(&self.paths.get_fixed_topology_nodes_path())?;
         let topology: FixedTopology = serde_json::from_str(json_string.as_str())?;
         fs::write(&output_topology_path, json_string)?;
 
-
         let numberOfTuplesToProducePerBuffer = match self.default_source_input.source_input_method {
-            SourceInputMethod::CSV => { self.default_source_input.tuples_per_buffer.try_into()? }
-            SourceInputMethod::TCP => { 0 }
+            SourceInputMethod::CSV => self.default_source_input.tuples_per_buffer.try_into()?,
+            SourceInputMethod::TCP => 0,
         };
 
         println!("generating fixed worker configs");
         let mut next_free_port = 5000;
         let mut fixed_config_paths = vec![];
-        let num_buffers = self.get_data_production_time().as_millis() / self.default_source_input.gathering_interval.as_millis();
+        let num_buffers = self.get_data_production_time().as_millis()
+            / self.default_source_input.gathering_interval.as_millis();
         let mut total_number_of_tuples_to_ingest = 0;
         let mut max_fixed_id = 0;
         for (input_id, location) in &topology.nodes {
             if input_id > &max_fixed_id {
                 max_fixed_id = *input_id;
             }
-            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, *input_id + 1);
+            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(
+                numberOfTuplesToProducePerBuffer,
+                num_buffers,
+                &mut total_number_of_tuples_to_ingest,
+                *input_id + 1,
+            );
             let worker_config = FixedWorkerConfig {
                 // rpcPort: next_free_port,
                 // dataPort: next_free_port + 1,
@@ -953,7 +1129,8 @@ impl InputConfig {
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
             };
-            let yaml_path = output_worker_config_directory.join(format!("fixed_worker{}.yaml", input_id));
+            let yaml_path =
+                output_worker_config_directory.join(format!("fixed_worker{}.yaml", input_id));
             worker_config.write_to_file(&yaml_path)?;
             next_free_port += 2;
             // if (input_id == &2) {
@@ -962,7 +1139,6 @@ impl InputConfig {
             fixed_config_paths.push(yaml_path);
         }
 
-
         //println!("reading mobility config from {}", self.paths.get_mobility_config_list_path().to_str().unwrap());
         println!("creating mobility config from");
         let mut mobile_config_paths = vec![];
@@ -970,18 +1146,23 @@ impl InputConfig {
         let mobility_input_config_path_option = &self.paths.get_mobility_config_list_path();
         //let mut input_id = max_fixed_id + 1;
 
-        let (mut input_id, mobility_input_config, simulated_reconnects) = if let Some(path) = mobility_input_config_path_option {
-            // let mobility_input_config = MobilityInputConfigList::read_input_from_file(&path)?;
-            // (max_fixed_id + 1, mobility_input_config)
-            println!("trying to create mobility input config from simulated reconnects file");
-            let json_string = std::fs::read_to_string(&path)?;
-            let simulated_reconnects: SimulatedReconnects = serde_json::from_str(json_string.as_str())?;
-            let mobility_input_config = simulated_reconnects.get_mobility_input_config_list();
-            (max_fixed_id + 1, mobility_input_config, simulated_reconnects)
-        } else {
-            panic!("No path set for mobility input config")
-        };
-
+        let (mut input_id, mobility_input_config, simulated_reconnects) =
+            if let Some(path) = mobility_input_config_path_option {
+                // let mobility_input_config = MobilityInputConfigList::read_input_from_file(&path)?;
+                // (max_fixed_id + 1, mobility_input_config)
+                println!("trying to create mobility input config from simulated reconnects file");
+                let json_string = std::fs::read_to_string(&path)?;
+                let simulated_reconnects: SimulatedReconnects =
+                    serde_json::from_str(json_string.as_str())?;
+                let mobility_input_config = simulated_reconnects.get_mobility_input_config_list();
+                (
+                    max_fixed_id + 1,
+                    mobility_input_config,
+                    simulated_reconnects,
+                )
+            } else {
+                panic!("No path set for mobility input config")
+            };
 
         let mut generated_mobility_configs = vec![];
         let mut central_topology_update_list = rest_node_relocation::TopologyUpdateList::new();
@@ -1002,7 +1183,12 @@ impl InputConfig {
             };
             generated_mobility_configs.push(generated_mobility_config.clone());
 
-            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(numberOfTuplesToProducePerBuffer, num_buffers, &mut total_number_of_tuples_to_ingest, input_id + 1);
+            let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(
+                numberOfTuplesToProducePerBuffer,
+                num_buffers,
+                &mut total_number_of_tuples_to_ingest,
+                input_id + 1,
+            );
 
             //create config
             let worker_config = MobileWorkerConfig {
@@ -1021,26 +1207,31 @@ impl InputConfig {
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
             };
-            let yaml_path = output_worker_config_directory.join(format!("mobile_worker{}.yaml", input_id));
+            let yaml_path =
+                output_worker_config_directory.join(format!("mobile_worker{}.yaml", input_id));
             worker_config.write_to_file(&yaml_path)?;
             mobile_config_paths.push(yaml_path);
             input_id += 1;
             next_free_port += 2;
-            let _num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
-        };
+            let _num_tuples =
+                num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
+        }
 
         let cvec: Vec<TopologyUpdate> = central_topology_update_list.into();
         //todo: we also need to get the list of initial updates here
         let reconnect_json = serde_json::to_string_pretty(&cvec).unwrap();
         println!("{}", reconnect_json);
 
-        let output_central_reconnect_path = output_trajectory_directory.join("central_reconnects.json");
-        fs::write(&output_central_reconnect_path, reconnect_json).expect("Could not write central reconnects");
+        let output_central_reconnect_path =
+            output_trajectory_directory.join("central_reconnects.json");
+        fs::write(&output_central_reconnect_path, reconnect_json)
+            .expect("Could not write central reconnects");
         let list_of_generated_mobility_configs = MobilityInputConfigList {
             worker_mobility_configs: generated_mobility_configs,
             central_topology_update_list_path: Some(output_central_reconnect_path.clone()),
         };
-        list_of_generated_mobility_configs.write_to_file(&output_trajectory_directory.join("mobility_configs.toml"));
+        list_of_generated_mobility_configs
+            .write_to_file(&output_trajectory_directory.join("mobility_configs.toml"));
 
         let mut edges = vec![];
         for (parent, children) in topology.children {
@@ -1074,18 +1265,43 @@ impl InputConfig {
         })
     }
 
-    fn get_physical_sources_for_node(&mut self, numberOfTuplesToProducePerBuffer: u64, num_buffers: u128, total_number_of_tuples_to_ingest: &mut u64, input_id: u64) -> (Vec<PhysicalSource>, Option<u16>) {
-        let place_default_sources_on_node_ids = fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path).expect("Failed to read place_default_sources_on_node_ids");
-        let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> = serde_json::from_str(&place_default_sources_on_node_ids).expect("could not parse map of sourcees to nodes");
-        let place_default_sources_on_node_ids: HashMap<String, Vec<String>> = place_default_sources_on_node_ids.iter().map(|(k, v)| (k.to_string(), v.clone().iter().map(|x| x.to_string()).collect())).collect();
-        let (physical_sources, number_of_slots) = if let Some((_, logical_source_names)) = place_default_sources_on_node_ids.get_key_value(&input_id.to_string()) {
-            let num_tuples = num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
+    fn get_physical_sources_for_node(
+        &mut self,
+        numberOfTuplesToProducePerBuffer: u64,
+        num_buffers: u128,
+        total_number_of_tuples_to_ingest: &mut u64,
+        input_id: u64,
+    ) -> (Vec<PhysicalSource>, Option<u16>) {
+        let place_default_sources_on_node_ids =
+            fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path)
+                .expect("Failed to read place_default_sources_on_node_ids");
+        let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> =
+            serde_json::from_str(&place_default_sources_on_node_ids)
+                .expect("could not parse map of sourcees to nodes");
+        let place_default_sources_on_node_ids: HashMap<String, Vec<String>> =
+            place_default_sources_on_node_ids
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.to_string(),
+                        v.clone().iter().map(|x| x.to_string()).collect(),
+                    )
+                })
+                .collect();
+        let (physical_sources, number_of_slots) = if let Some((_, logical_source_names)) =
+            place_default_sources_on_node_ids.get_key_value(&input_id.to_string())
+        {
+            let num_tuples =
+                num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
             let mut sources = vec![];
 
             //iterate over logical source names
             for (index, logical_source_name) in logical_source_names.iter().enumerate() {
                 //get the source count for this source group
-                let source_count = self.source_count_map.entry(logical_source_name.clone()).or_insert(0);
+                let source_count = self
+                    .source_count_map
+                    .entry(logical_source_name.clone())
+                    .or_insert(0);
                 *source_count += 1;
 
                 *total_number_of_tuples_to_ingest += num_tuples;
@@ -1126,7 +1342,6 @@ pub struct MobilityInputConfigList {
     pub central_topology_update_list_path: Option<PathBuf>,
 }
 
-
 impl MobilityInputConfigList {
     fn read_input_from_file(file_path: &Path) -> Result<Self, Box<dyn Error>> {
         let config: Self = toml::from_str(&read_to_string(file_path)?)?;
@@ -1161,7 +1376,6 @@ pub struct PrecalculatedReconnect {
     #[serde(rename = "column2")]
     pub offset: Duration,
 }
-
 
 #[derive(Deserialize, Debug)]
 pub struct FixedTopology {
@@ -1206,7 +1420,7 @@ struct ConnectivityReply {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum PhysicalSourceType {
-    CSV_SOURCE
+    CSV_SOURCE,
 }
 
 #[serde_as]
@@ -1228,17 +1442,17 @@ enum SocketDomain {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum SocketType {
-    SOCKET_STREAM
+    SOCKET_STREAM,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 enum SourceInputFormat {
-    CSV
+    CSV,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 enum DecidedmMessageSize {
-    TUPLE_SEPARATOR
+    TUPLE_SEPARATOR,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1253,7 +1467,6 @@ struct TCPSourceConfiguration {
     flushIntervalMS: u64,
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 struct PhysicalSource {
     logicalSourceName: String,
@@ -1263,7 +1476,6 @@ struct PhysicalSource {
     Type: PhysicalSourceType,
     configuration: PhysicalSourceConfiguration,
 }
-
 
 //todo: also add the coordinator port
 #[derive(Debug, Serialize, Deserialize)]
@@ -1324,11 +1536,19 @@ pub struct InputMobilityconfig {
 
 impl InputMobilityconfig {
     pub fn get_location_provider_config_path(&self) -> PathBuf {
-        self.locationProviderConfig.to_path(self.mobility_base_path.as_ref().expect("mobility base path not set"))
+        self.locationProviderConfig.to_path(
+            self.mobility_base_path
+                .as_ref()
+                .expect("mobility base path not set"),
+        )
     }
 
     pub fn get_precalc_reconnect_path(&self) -> PathBuf {
-        self.precalcReconnectPath.to_path(self.mobility_base_path.as_ref().expect("mobility base path not set"))
+        self.precalcReconnectPath.to_path(
+            self.mobility_base_path
+                .as_ref()
+                .expect("mobility base path not set"),
+        )
     }
 
     //create a mobility config containing the absolute paths
@@ -1396,7 +1616,9 @@ impl CoordinatorConfiguration {
         let yaml_string = serde_yaml::to_string(&self)?;
         let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
         let mut after_round_trip = String::new();
-        YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
+        YamlEmitter::new(&mut after_round_trip)
+            .dump(&round_trip_yaml[0])
+            .unwrap();
         fs::write(&path, after_round_trip)?;
         Ok(())
     }
@@ -1407,7 +1629,9 @@ impl MobileWorkerConfig {
         let yaml_string = serde_yaml::to_string(&self)?;
         let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
         let mut after_round_trip = String::new();
-        YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
+        YamlEmitter::new(&mut after_round_trip)
+            .dump(&round_trip_yaml[0])
+            .unwrap();
         fs::write(&path, after_round_trip)?;
         Ok(())
     }
@@ -1419,7 +1643,9 @@ impl FixedWorkerConfig {
         let yaml_string = serde_yaml::to_string(&self)?;
         let round_trip_yaml = YamlLoader::load_from_str(&yaml_string).unwrap();
         let mut after_round_trip = String::new();
-        YamlEmitter::new(&mut after_round_trip).dump(&round_trip_yaml[0]).unwrap();
+        YamlEmitter::new(&mut after_round_trip)
+            .dump(&round_trip_yaml[0])
+            .unwrap();
         fs::write(&path, after_round_trip)?;
         Ok(())
     }
@@ -1489,17 +1715,38 @@ impl OutputTuple {
         let win_end = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let id_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let join_id_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let sequence_number_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let sequence_number_1 =
+            byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let event_time_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let processing_time_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let emission_time_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let processing_time_1 =
+            byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let emission_time_1 =
+            byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let id_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let join_id_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let sequence_number_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let sequence_number_2 =
+            byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let event_time_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let processing_time_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let emission_time_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        Self { win_start, win_end, id_1, join_id_1, sequence_number_1, event_time_1, processing_time_1, emission_time_1, id_2, join_id_2, sequence_number_2, event_time_2, processing_time_2, emission_time_2 }
+        let processing_time_2 =
+            byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let emission_time_2 =
+            byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        Self {
+            win_start,
+            win_end,
+            id_1,
+            join_id_1,
+            sequence_number_1,
+            event_time_1,
+            processing_time_1,
+            emission_time_1,
+            id_2,
+            join_id_2,
+            sequence_number_2,
+            event_time_2,
+            processing_time_2,
+            emission_time_2,
+        }
     }
 }
 
@@ -1512,7 +1759,10 @@ pub struct AvroOutputWriter {
 
 impl AvroOutputWriter {
     pub fn new(file: File) -> Self {
-        Self { file, buffer: Vec::new() }
+        Self {
+            file,
+            buffer: Vec::new(),
+        }
     }
 }
 
@@ -1550,11 +1800,11 @@ impl OutputWriter for AvroOutputWriter {
         println!("{:?}", schema);
 
         let mut writer = Writer::new(&schema, Vec::new());
-        
+
         for tuple in &self.buffer {
             writer.append_ser(tuple)?;
         }
-        
+
         // let mut writer = Writer::new(&schema, file);
         let encoded = writer.into_inner().unwrap();
         self.file.write_all(&encoded)?;
@@ -1581,14 +1831,21 @@ impl OutputWriter for FileOutputWriter {
     }
 }
 
-
-
 pub trait OutputWriter {
     fn write(&mut self, tuple: OutputTuple) -> Result<(), Box<dyn Error>>;
     fn flush(&mut self) -> Result<(), Box<dyn Error>>;
 }
 
-pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::TcpStream, line_count: Arc<AtomicUsize>, desired_line_count: u64, file: Arc<Mutex<W>>, shutdown_triggered: Arc<AtomicBool>, start_time: SystemTime, experiment_duration: Duration, output_type: OutputType) -> Result<(), Box<dyn Error>> {
+pub async fn handle_connection<W: ?Sized + OutputWriter>(
+    stream: tokio::net::TcpStream,
+    line_count: Arc<AtomicUsize>,
+    desired_line_count: u64,
+    file: Arc<Mutex<W>>,
+    shutdown_triggered: Arc<AtomicBool>,
+    start_time: SystemTime,
+    experiment_duration: Duration,
+    output_type: OutputType,
+) -> Result<(), Box<dyn Error>> {
     // Create a buffer reader for the incoming data
     //let mut reader = tokio::io::BufReader::new(stream);
     //let mut line = String::new();
@@ -1607,7 +1864,6 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
                 break;
             }
         }
-
 
         // Increment the line count
         //line_count.fetch_add(1, Ordering::SeqCst);
@@ -1637,7 +1893,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
     //         current_valid_byte_count = 0;
     //     }
     // }
-    // 
+    //
     // // sanity check
     // for &byte in &buf[total_valid_byte_count..] {
     //     if byte == 10u8 {
@@ -1674,7 +1930,6 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
             }
         }
         OutputType::AVRO => {
-
             let mut lines = 0;
             for i in (0..valid_bytes).step_by(tuple_size) {
                 line_count.fetch_add(1, Ordering::SeqCst);
@@ -1686,13 +1941,13 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
                 lines += 1;
 
                 // let mut record = Record::new(writer.schema()).unwrap();
-                // 
+                //
                 // let id = u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]);
                 // let sequence_number = u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]);
                 // let event_timestamp = u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]);
                 // let ingestion_timestamp = u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]);
                 // let output_timestamp = u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]);
-                // 
+                //
                 // record.put("id", i64::try_from(id)?);
                 // record.put("sequence_number", i64::try_from(sequence_number)?);
                 // record.put("event_time", i64::try_from(event_timestamp)?);
@@ -1705,26 +1960,75 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
                 // record.put("ingestion_timestamp", i64::try_from(ingestion_timestamp)?);
                 // record.put("output_timestamp", i64::try_from(output_timestamp)?);
                 // writer.append(record)?;
-
             }
             println!("{} lines converted to avro", lines);
         }
     }
 
-
-    println!("Received {} lines of {}", line_count.load(SeqCst), desired_line_count);
+    println!(
+        "Received {} lines of {}",
+        line_count.load(SeqCst),
+        desired_line_count
+    );
 
     Ok(())
 }
 
-
 fn get_tuple_string(binary_tuple: &[u8]) -> String {
-    let id = u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]);
-    let sequence_number = u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]);
-    let event_timestamp = u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]);
-    let ingestion_timestamp = u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]);
-    let output_timestamp = u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]);
-    format!("{},{},{},{},{}", id, sequence_number, event_timestamp, ingestion_timestamp, output_timestamp)
+    let id = u64::from_le_bytes([
+        binary_tuple[0],
+        binary_tuple[1],
+        binary_tuple[2],
+        binary_tuple[3],
+        binary_tuple[4],
+        binary_tuple[5],
+        binary_tuple[6],
+        binary_tuple[7],
+    ]);
+    let sequence_number = u64::from_le_bytes([
+        binary_tuple[8],
+        binary_tuple[9],
+        binary_tuple[10],
+        binary_tuple[11],
+        binary_tuple[12],
+        binary_tuple[13],
+        binary_tuple[14],
+        binary_tuple[15],
+    ]);
+    let event_timestamp = u64::from_le_bytes([
+        binary_tuple[16],
+        binary_tuple[17],
+        binary_tuple[18],
+        binary_tuple[19],
+        binary_tuple[20],
+        binary_tuple[21],
+        binary_tuple[22],
+        binary_tuple[23],
+    ]);
+    let ingestion_timestamp = u64::from_le_bytes([
+        binary_tuple[24],
+        binary_tuple[25],
+        binary_tuple[26],
+        binary_tuple[27],
+        binary_tuple[28],
+        binary_tuple[29],
+        binary_tuple[30],
+        binary_tuple[31],
+    ]);
+    let output_timestamp = u64::from_le_bytes([
+        binary_tuple[32],
+        binary_tuple[33],
+        binary_tuple[34],
+        binary_tuple[35],
+        binary_tuple[36],
+        binary_tuple[37],
+        binary_tuple[38],
+        binary_tuple[39],
+    ]);
+    format!(
+        "{},{},{},{},{}",
+        id, sequence_number, event_timestamp, ingestion_timestamp, output_timestamp
+    )
 }
 
 fn count_lines_in_file(file_path: &Path) -> io::Result<usize> {
@@ -1753,12 +2057,15 @@ fn create_folder_with_timestamp(mut path: PathBuf, prefix: &str) -> PathBuf {
     path
 }
 
-fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Result<(), Box<dyn Error>> {
+fn wait_for_coordinator(
+    shutdown_triggered: Arc<AtomicBool>,
+) -> std::result::Result<(), Box<dyn Error>> {
     for _i in 0..10 {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
         }
-        if let Ok(reply) = reqwest::blocking::get("http://127.0.0.1:8081/v1/nes/connectivity/check") {
+        if let Ok(reply) = reqwest::blocking::get("http://127.0.0.1:8081/v1/nes/connectivity/check")
+        {
             if reply.json::<ConnectivityReply>().unwrap().success {
                 println!("Coordinator has connected");
                 return Ok(());
@@ -1770,13 +2077,19 @@ fn wait_for_coordinator(shutdown_triggered: Arc<AtomicBool>) -> std::result::Res
     Err(String::from("Coordinator did not connect").into())
 }
 
-fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc<AtomicBool>, restPort: u16) -> std::result::Result<usize, Box<dyn Error>> {
+fn wait_for_topology(
+    expected_node_count: Option<usize>,
+    shutdown_triggered: Arc<AtomicBool>,
+    restPort: u16,
+) -> std::result::Result<usize, Box<dyn Error>> {
     println!("waiting for topology, rest port {}", &restPort.to_string());
     for _i in 0..10 {
         if shutdown_triggered.load(Ordering::SeqCst) {
             return Err(String::from("Shutdown triggered").into());
         }
-        if let Ok(reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
+        if let Ok(reply) =
+            reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort))
+        {
             let size = reply.json::<ActualTopology>().unwrap().nodes.len();
             println!("topology contains {} nodes", size);
             if let Some(expected) = expected_node_count {
@@ -1792,8 +2105,13 @@ fn wait_for_topology(expected_node_count: Option<usize>, shutdown_triggered: Arc
 }
 
 pub fn print_topology(restPort: u16) -> std::result::Result<(), Box<dyn Error>> {
-    println!("retrieving topology from, rest port {}", &restPort.to_string());
-    if let Ok(reply) = reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort)) {
+    println!(
+        "retrieving topology from, rest port {}",
+        &restPort.to_string()
+    );
+    if let Ok(reply) =
+        reqwest::blocking::get(format!("http://127.0.0.1:{}/v1/nes/topology", restPort))
+    {
         println!("{}", reply.text()?);
         //let size = reply.json::<ActualTopology>().unwrap().nodes.len();
         //println!("topology contains {} nodes", size);
@@ -1822,7 +2140,6 @@ fn create_csv_file(file_path: &str, id: u32, num_rows: usize) -> Result<(), Box<
     Ok(())
 }
 
-
 fn create_input_source_data(
     directory_path: &Path,
     id: u32,
@@ -1834,7 +2151,6 @@ fn create_input_source_data(
 
     let file_name = format!("source_input{}.csv", id);
 
-
     // Construct the full file path
     let file_path = Path::new(directory_path).join(&file_name);
 
@@ -1842,11 +2158,39 @@ fn create_input_source_data(
     let num_rows = tuples_per_buffer * num_buffers;
 
     // Call the create_csv_file function to generate the CSV file
-    create_csv_file(file_path.to_str().ok_or("Error getting file string")?, id, num_rows)?;
+    create_csv_file(
+        file_path.to_str().ok_or("Error getting file string")?,
+        id,
+        num_rows,
+    )?;
 
     println!("Input file created: {}", file_path.display());
 
     Ok(file_path)
+}
+
+fn get_expected_join_output_count(
+    num_tuples: u64,
+    window_size: u64,
+    join_match_interval: u64,
+) -> u64 {
+    let num_tuples = num_tuples / 2; //we have two sources feeding into the same join
+    let subtract_amount = num_tuples % window_size; //last window might not be full
+
+    //tuple on the boundary will trigger new window but not be part of the output
+    let subtract_amount = if subtract_amount == 0 {
+        1
+    } else {
+        subtract_amount
+    };
+
+    let expected_output_count = (num_tuples - subtract_amount); //subtract the tuples that are not part of the output
+    let expected_output_count = expected_output_count + 1; //we start counting at 0, so add one
+    let expected_output_count =
+        expected_output_count - (expected_output_count % join_match_interval);
+    let expected_output_count = expected_output_count / join_match_interval;
+
+    expected_output_count
 }
 
 #[cfg(test)]
@@ -1857,5 +2201,15 @@ mod tests {
     fn test_deserializing_log_level() {
         let log_level: LogLevel = serde_json::from_str("\"LOG_DEBUG\"").unwrap();
         assert_eq!(log_level, LogLevel::LOG_DEBUG);
+    }
+
+    #[test]
+    fn test_tuple_count_calculation() {
+        let num_tuples = 600;
+        let window_size = 10;
+        let join_match_interval = 2;
+        let expected_output_count =
+            get_expected_join_output_count(num_tuples, window_size, join_match_interval);
+        assert_eq!(expected_output_count, 150);
     }
 }
