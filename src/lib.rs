@@ -694,7 +694,7 @@ impl ExperimentSetup {
 
         // //create vector of ExecuteQueryRequests
         // let mut execute_query_requests = vec![];
-        // 
+        //
         // //iterate over query strings
         // for query_string in query_strings {
         //     let execute_query_request = ExecuteQueryRequest {
@@ -1466,24 +1466,40 @@ pub enum OutputType {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct OutputTuple {
-    id: u64,
-    join_id: u64,
-    sequence_number: u64,
-    event_time: u64,
-    processing_time: u64,
-    emission_time: u64,
+    win_start: u64,
+    win_end: u64,
+    id_1: u64,
+    join_id_1: u64,
+    sequence_number_1: u64,
+    event_time_1: u64,
+    processing_time_1: u64,
+    emission_time_1: u64,
+    id_2: u64,
+    join_id_2: u64,
+    sequence_number_2: u64,
+    event_time_2: u64,
+    processing_time_2: u64,
+    emission_time_2: u64,
 }
 
 impl OutputTuple {
     fn from_bytes(bytes: &[u8]) -> Self {
         let mut cursor = Cursor::new(bytes);
-        let id = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let join_id = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let sequence_number = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let event_time = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let processing_time = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        let emission_time = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
-        Self { id, join_id, sequence_number, event_time, processing_time, emission_time }
+        let win_start = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let win_end = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let id_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let join_id_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let sequence_number_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let event_time_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let processing_time_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let emission_time_1 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let id_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let join_id_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let sequence_number_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let event_time_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let processing_time_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        let emission_time_2 = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
+        Self { win_start, win_end, id_1, join_id_1, sequence_number_1, event_time_1, processing_time_1, emission_time_1, id_2, join_id_2, sequence_number_2, event_time_2, processing_time_2, emission_time_2 }
     }
 }
 
@@ -1512,12 +1528,20 @@ impl OutputWriter for AvroOutputWriter {
                 "type": "record",
                 "name": "experiment_output",
                 "fields": [
-                    {"name": "id", "type": "long"},
-                    {"name": "join_id", "type": "long"},
-                    {"name": "sequence_number", "type": "long"},
-                    {"name": "event_time", "type": "long"},
-                    {"name": "processing_time", "type": "long"},
-                    {"name": "emission_time", "type": "long"}
+                    {"name": "win_start", "type": "long"},
+                    {"name": "win_end", "type": "long"},
+                    {"name": "id_1", "type": "long"},
+                    {"name": "join_id_1", "type": "long"},
+                    {"name": "sequence_number_1", "type": "long"},
+                    {"name": "event_time_1", "type": "long"},
+                    {"name": "processing_time_1", "type": "long"},
+                    {"name": "emission_time_1", "type": "long"},
+                    {"name": "id_2", "type": "long"},
+                    {"name": "join_id_2", "type": "long"},
+                    {"name": "sequence_number_2", "type": "long"},
+                    {"name": "event_time_2", "type": "long"},
+                    {"name": "processing_time_2", "type": "long"},
+                    {"name": "emission_time_2", "type": "long"}
                 ]
             }
             "#;
@@ -1544,10 +1568,11 @@ pub struct FileOutputWriter {
 
 impl OutputWriter for FileOutputWriter {
     fn write(&mut self, tuple: OutputTuple) -> Result<(), Box<dyn Error>> {
-        let tuple_string = format!("{},{},{},{},{}", tuple.id, tuple.sequence_number, tuple.event_time, tuple.processing_time, tuple.emission_time);
-        self.file.write_all(tuple_string.as_bytes())?;
-        self.file.write_all(b"\n")?;
-        Ok(())
+        todo!()
+        // let tuple_string = format!("{},{},{},{},{}", tuple.id, tuple.sequence_number, tuple.event_time, tuple.processing_time, tuple.emission_time);
+        // self.file.write_all(tuple_string.as_bytes())?;
+        // self.file.write_all(b"\n")?;
+        // Ok(())
     }
 
     fn flush(&mut self) -> Result<(), Box<dyn Error>> {
@@ -1621,7 +1646,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
     // }
     //file.write_all(&buf[0..total_valid_byte_count])?;
 
-    let tuple_size = 48;
+    let tuple_size = std::mem::size_of::<OutputTuple>();
     let valid_bytes = buf.len() - (buf.len() % tuple_size);
     let mut lock = file.lock().unwrap();
 
