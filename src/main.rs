@@ -204,9 +204,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     //let input: String = text_io::read!("{}\n");
 
                     //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
-                    let desired_line_count = experiment.total_number_of_tuples_to_ingest;
-                    
-                    
+                    let desired_line_count = experiment.total_number_of_tuples_to_emit;
                     
                     // Bind the TCP listener to the specified address and port
 
@@ -274,8 +272,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         {
                             //todo! reactivate this
                             // assert_eq!(*c, 2);
-                            
-                            let input_replaced = query_string.replace("{INPUT1}", format!("{}s{}", k, 1).as_str());
+                            let window_size = experiment.input_config.parameters.window_size;
+                            let input_replaced = query_string.replace("{WINDOW_SIZE}", &window_size.to_string());
+                            let input_replaced = input_replaced.replace("{INPUT1}", format!("{}s{}", k, 1).as_str());
                             let input_replaced = input_replaced.replace("{INPUT2}", format!("{}s{}", k, 2).as_str());
                             let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
                             let tcp_sink = input_replaced.replace("{SINK}", &sink_string);

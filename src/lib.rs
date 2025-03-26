@@ -705,7 +705,7 @@ pub struct ExperimentSetup {
     pub fixed_worker_processes: Vec<Child>,
     edges: Vec<(u64, u64)>,
     pub input_config: InputConfig,
-    pub total_number_of_tuples_to_ingest: u64,
+    pub total_number_of_tuples_to_emit: u64,
     pub num_buffers: u128,
     pub simulated_reconnects: SimulatedReconnects,
     // pub central_topology_updates: Vec<TopologyUpdate>,
@@ -1104,7 +1104,7 @@ impl InputConfig {
         let mut fixed_config_paths = vec![];
         let num_buffers = self.get_data_production_time().as_millis()
             / self.default_source_input.gathering_interval.as_millis();
-        let mut total_number_of_tuples_to_ingest = 0;
+        let mut total_number_of_tuples_to_emit = 0;
         let mut max_fixed_id = 0;
         for (input_id, location) in &topology.nodes {
             if input_id > &max_fixed_id {
@@ -1113,7 +1113,7 @@ impl InputConfig {
             let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(
                 numberOfTuplesToProducePerBuffer,
                 num_buffers,
-                &mut total_number_of_tuples_to_ingest,
+                &mut total_number_of_tuples_to_emit,
                 *input_id + 1,
             );
             let worker_config = FixedWorkerConfig {
@@ -1188,7 +1188,7 @@ impl InputConfig {
             let (physical_sources, number_of_slots) = self.get_physical_sources_for_node(
                 numberOfTuplesToProducePerBuffer,
                 num_buffers,
-                &mut total_number_of_tuples_to_ingest,
+                &mut total_number_of_tuples_to_emit,
                 input_id + 1,
             );
 
@@ -1242,6 +1242,11 @@ impl InputConfig {
             }
         }
 
+        let total_number_of_tuples_to_emit = if JOIN_QUERY{
+            total_number_of_tuples_to_emit / 2
+        } else {
+            total_number_of_tuples_to_emit
+        };
         Ok(ExperimentSetup {
             output_config_directory,
             output_source_input_directory,
@@ -1256,7 +1261,7 @@ impl InputConfig {
             mobile_worker_processes: vec![],
             fixed_worker_processes: vec![],
             edges,
-            total_number_of_tuples_to_ingest: total_number_of_tuples_to_ingest / 2, //todo: rename fields
+            total_number_of_tuples_to_emit,
             input_config: self.clone(),
             num_buffers,
             generated_folder: generated_folder.to_path_buf(),
@@ -1305,7 +1310,7 @@ impl InputConfig {
                     .entry(logical_source_name.clone())
                     .or_insert(0);
                 *source_count += 1;
-                
+
                 //if this is a join query, modify the desired line count
                 let num_tuples = if JOIN_QUERY {
                     get_expected_join_output_count(num_tuples, self.parameters.window_size, self.parameters.join_match_interval)
@@ -2184,13 +2189,16 @@ pub fn get_expected_join_output_count(
     window_size: u64,
     join_match_interval: u64,
 ) -> u64 {
-    // let num_tuples = num_tuples / 2; //we have two sources feeding into the same join
     let finished_windows = (num_tuples  - 1) / window_size;
     println!("finished windows: {}", finished_windows);
     let processed_tuples = finished_windows * window_size;
     println!("processed tuples: {}", processed_tuples);
-    let matchted_tuples = processed_tuples / join_match_interval;
+    
+    //the seq nr starts at zero so the index that we match on is actually one less than the number of tuples
+    //we always match the zero so we need to always add one
+    let matchted_tuples = ((processed_tuples - 1) / join_match_interval) + 1;
     println!("matched tuples: {}", matchted_tuples);
+    
     matchted_tuples
 }
 
@@ -2206,7 +2214,7 @@ mod tests {
 
     #[test]
     fn test_tuple_count_calculation() {
-        let num_tuples = 600;
+        let num_tuples = 600 / 2;
         let window_size = 40;
         let join_match_interval = 2;
         let expected_output_count =
@@ -2226,7 +2234,14 @@ mod tests {
         let expected_output_count =
             get_expected_join_output_count(num_tuples, window_size, join_match_interval);
         assert_eq!(expected_output_count, 40);
-        
+
+        let num_tuples = 600 / 2;
+        let window_size = 5;
+        let join_match_interval = 7;
+        let expected_output_count =
+            get_expected_join_output_count(num_tuples, window_size, join_match_interval);
+        assert_eq!(expected_output_count, 43);
+
         let num_tuples = 600 / 2;
         let window_size = 1;
         let join_match_interval = 1;
