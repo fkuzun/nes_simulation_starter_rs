@@ -276,6 +276,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                             let input_replaced = query_string.replace("{WINDOW_SIZE}", &window_size.to_string());
                             let input_replaced = input_replaced.replace("{INPUT1}", format!("{}s{}", k, 1).as_str());
                             let input_replaced = input_replaced.replace("{INPUT2}", format!("{}s{}", k, 2).as_str());
+                            let input_replaced = input_replaced.replace("{INPUT3}", format!("{}s{}", k, 3).as_str());
+                            let input_replaced = input_replaced.replace("{INPUT4}", format!("{}s{}", k, 4).as_str());
                             let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
                             let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
                             let null_sink = input_replaced
