@@ -1,4 +1,4 @@
-enable_query_reconfiguration = [true]
+enable_query_reconfiguration = [false]
 #enable_query_reconfiguration = [true,false]
 enable_proactive_deployment = [false]
 #tuples_per_buffer = [200, 400, 800]
@@ -38,9 +38,10 @@ source_input_server_port = 9999
 #query_string = "Query::from(\"{INPUT1}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).joinWith(Query::from(\"{INPUT2}\").map(Attribute(\"value\") = Attribute(\"value\") * 2)).where(Attribute(\"value\")).equalsTo(Attribute(\"value\")).window(TumblingWindow::of(EventTime(Attribute(\"event_timestamp\")), Seconds(1))).sink({SINK});"
 #query_string = "Query::from(\"{INPUT1}\").map(Attribute(\"value\") = Attribute(\"value\") * 2).joinWith(Query::from(\"{INPUT2}\").map(Attribute(\"value\") = Attribute(\"value\") * 2)).where(Attribute(\"value\") == Attribute(\"value\")).window(TumblingWindow::of(EventTime(Attribute(\"event_timestamp\")), Seconds(1))).sink({SINK});"
 #query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Seconds(1))).sink({SINK});"
-query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Milliseconds({WINDOW_SIZE}))).sink({SINK});"
+
 join_match_interval = 7
 window_size = 5
+query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Milliseconds({WINDOW_SIZE}))).sink({SINK});"
 
 #place_default_sources_on_node_ids_path = "/data/ankit/relative_paths/quadrants/s41_s42_2h_60s_every1s_4sources_per_query/source_groups.json"
 #place_default_sources_on_node_ids_path = "/data/ankit/relative_paths/quadrants/august24/s41_s42_20m_10sbatch_4source/source_groups.json"
