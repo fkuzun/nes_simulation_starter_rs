@@ -205,6 +205,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                     let desired_line_count = experiment.total_number_of_tuples_to_ingest;
+                    
+                    
+                    
                     // Bind the TCP listener to the specified address and port
 
                     let mut line_count = AtomicUsize::new(0); // Counter for the lines written
