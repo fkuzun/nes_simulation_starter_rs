@@ -2176,7 +2176,7 @@ fn get_expected_join_output_count(
     join_match_interval: u64,
 ) -> u64 {
     let num_tuples = num_tuples / 2; //we have two sources feeding into the same join
-    let finished_windows = num_tuples / window_size;
+    let finished_windows = (num_tuples  - 1) / window_size;
     println!("finished windows: {}", finished_windows);
     let processed_tuples = finished_windows * window_size;
     println!("processed tuples: {}", processed_tuples);
@@ -2199,9 +2199,30 @@ mod tests {
     fn test_tuple_count_calculation() {
         let num_tuples = 600;
         let window_size = 40;
-        let join_match_interval = 7;
+        let join_match_interval = 2;
         let expected_output_count =
             get_expected_join_output_count(num_tuples, window_size, join_match_interval);
         assert_eq!(expected_output_count, 140);
+
+        let num_tuples = 600;
+        let window_size = 10;
+        let join_match_interval = 2;
+        let expected_output_count =
+            get_expected_join_output_count(num_tuples, window_size, join_match_interval);
+        assert_eq!(expected_output_count, 145);
+
+        let num_tuples = 600;
+        let window_size = 40;
+        let join_match_interval = 7;
+        let expected_output_count =
+            get_expected_join_output_count(num_tuples, window_size, join_match_interval);
+        assert_eq!(expected_output_count, 40);
+        
+        let num_tuples = 600;
+        let window_size = 1;
+        let join_match_interval = 1;
+        let expected_output_count =
+            get_expected_join_output_count(num_tuples, window_size, join_match_interval);
+        assert_eq!(expected_output_count, 299);
     }
 }

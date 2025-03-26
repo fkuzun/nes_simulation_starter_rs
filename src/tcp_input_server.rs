@@ -18,8 +18,8 @@ fn main() -> std::io::Result<()> {
     let buffer_size = args[4].parse::<usize>().expect("Invalid buffer size");
     let gathering_interval = args[5].parse::<u64>().expect("Invalid gathering interval");
     let deadline = std::time::Duration::from_millis(args[6].parse::<u64>().expect("Invalid deadline"));
-    // let join_match_interval = args[7].parse::<u64>().unwrap_or(1);
-    let join_match_interval = 7;
+    let join_match_interval = args[7].parse::<u64>().unwrap_or(1);
+    // let join_match_interval = 7;
 
     // Create a TCP listener bound to a specific address and port
     let listener = match TcpListener::bind((hostname, port)) {

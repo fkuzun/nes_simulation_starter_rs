@@ -166,6 +166,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                             .as_millis()
                             .to_string(),
                     )
+                    .arg(
+                        experiment
+                            .input_config
+                            .parameters
+                            .join_match_interval
+                            .to_string(),
+                    )
                     .spawn()?;
                 println!(
                     "input server process id {}",
