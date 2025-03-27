@@ -270,23 +270,30 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                         for (k, c) in source_count_map.iter() {
                         {
-                            //todo! reactivate this
-                            // assert_eq!(*c, 2);
+                            assert_eq!(*c % 2, 0);
+                            let mut joins = String::from("{");
+                            for i in 0..*c / 2 {
+                                //replace input 1 and 2 in query string and add to join string
+                                let join_string = query_string
+                                    .replace("{INPUT1}", format!("{}s{}", k, i * 2 + 1).as_str())
+                                    .replace("{INPUT2}", format!("{}s{}", k, i * 2 + 2).as_str());
+                                joins.push_str(&join_string);
+                                
+                                if i < *c / 2 - 1 {
+                                    joins.push_str(", ");
+                                }
+                            }
+                            joins.push('}');
+
+                            let outer_query = "Query::sink2({SINK}, {JOINS});";
+                            //replace joins
+                            let outer_query = outer_query.replace("{JOINS}", &joins);
+                            
                             let window_size = experiment.input_config.parameters.window_size;
-                            let input_replaced = query_string.replace("{WINDOW_SIZE}", &window_size.to_string());
-                            let input_replaced = input_replaced.replace("{INPUT1}", format!("{}s{}", k, 1).as_str());
-                            let input_replaced = input_replaced.replace("{INPUT2}", format!("{}s{}", k, 2).as_str());
-                            let input_replaced = input_replaced.replace("{INPUT3}", format!("{}s{}", k, 3).as_str());
-                            let input_replaced = input_replaced.replace("{INPUT4}", format!("{}s{}", k, 4).as_str());
+                            let input_replaced = outer_query.replace("{WINDOW_SIZE}", &window_size.to_string());
                             let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
                             let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
-                            let null_sink = input_replaced
-                                .replace("{SINK}", "NullOutputSinkDescriptor::create()");
                             query_strings.push(tcp_sink);
-                            for _i in 0..experiment.input_config.parameters.query_duplication_factor
-                            {
-                                query_strings.push(null_sink.clone());
-                            }
                         }
                         }
                     } else {
