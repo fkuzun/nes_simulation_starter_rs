@@ -1,17 +1,17 @@
-#enable_query_reconfiguration = [true]
-enable_query_reconfiguration = [true,false]
+enable_query_reconfiguration = [false]
+#enable_query_reconfiguration = [true,false]
 #enable_query_reconfiguration = [true]
 enable_proactive_deployment = [false]
 #tuples_per_buffer = [200, 400, 800]
-tuples_per_buffer = [10]
+tuples_per_buffer = [1]
 #tuples_per_buffer = [50]
 #tuples_per_buffer = [150]
 #tuples_per_buffer = [10]
 #gathering_interval = [1, 5, 10]
-gathering_interval = [1]
+gathering_interval = [100]
 speedup_factor = [1]
 #placementAmendmentThreadCount = [1, 8]
-placementAmendmentThreadCount = [1,8]
+placementAmendmentThreadCount = [1]
 #placementAmendmentThreadCount = [1]
 
 [default_config.parameters]
@@ -22,10 +22,10 @@ reconnect_start_offset = 40
 amount_of_reconnects = 10
 speedup_factor = 1.0
 deployment_time_offset = 20
-warmup = 20
+warmup = 10
 #reconnect_runtime = 30
-reconnect_runtime = 120
-cooldown_time = 30
+reconnect_runtime = 10
+cooldown_time = 10
 post_cooldown_time = 10
 #post_cooldown_time = 60
 enable_query_reconfiguration = true
