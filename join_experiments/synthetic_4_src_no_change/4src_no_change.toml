@@ -40,7 +40,7 @@ source_input_server_port = 9999
 #query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Seconds(1))).sink({SINK});"
 
 join_match_interval = 7
-window_size = 5
+window_size = 10
 query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Milliseconds({WINDOW_SIZE})))"
 
 #place_default_sources_on_node_ids_path = "/data/ankit/relative_paths/quadrants/s41_s42_2h_60s_every1s_4sources_per_query/source_groups.json"
