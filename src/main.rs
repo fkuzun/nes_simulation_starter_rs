@@ -268,8 +268,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                             *source_count += 1;
                         };
 
-                        for (k, c) in source_count_map.iter() {
-                        {
+                        let (k, c) = source_count_map.iter().next().unwrap().clone();
+                        // for (k, c) in source_count_map.iter() {
                             assert_eq!(*c % 2, 0);
                             let mut joins = String::from("{");
                             for i in 0..*c / 2 {
@@ -294,9 +294,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
                             let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
                             query_strings.push(tcp_sink);
-                            //break;
-                        }
-                        }
+                        // }
                     } else {
                         for id in place_default_sources_on_node_ids
                             .values()
