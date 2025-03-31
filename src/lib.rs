@@ -2203,7 +2203,7 @@ pub fn get_expected_join_output_count(
     join_match_interval: u64,
 ) -> u64 {
     println!("num tuples: {}", num_tuples);
-    let finished_windows = (num_tuples  - 1) / window_size;
+    let finished_windows = ((num_tuples  - 1) / window_size) - 1;
     println!("finished windows: {}", finished_windows);
     let processed_tuples = finished_windows * window_size;
     println!("processed tuples: {}", processed_tuples);
