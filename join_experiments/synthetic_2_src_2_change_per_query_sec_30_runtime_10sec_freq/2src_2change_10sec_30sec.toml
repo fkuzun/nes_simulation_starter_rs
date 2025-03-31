@@ -37,7 +37,7 @@ join_match_interval = 7
 window_size = 10
 query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Milliseconds({WINDOW_SIZE})))"
 
-place_default_sources_on_node_ids_path = "/home/x/rustProjects/nes_simulation_starter_rs/join_experiments/synthetic_2_src_2_change_per_query_sec_30_runtime_1sec_freq/source_groups.json"
+place_default_sources_on_node_ids_path = "/home/x/rustProjects/nes_simulation_starter_rs/join_experiments/synthetic_2_src_2_change_per_query_sec_30_runtime_10sec_freq/source_groups.json"
 
 num_worker_threads = 1
 

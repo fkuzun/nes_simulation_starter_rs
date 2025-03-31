@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -23,7 +23,7 @@ use avro_rs::types::Record;
 use avro_rs::{Schema, Writer};
 use chrono::Local;
 use futures::AsyncWriteExt;
-use itertools::Itertools;
+use itertools::{assert_equal, Itertools};
 use nes_tools::launch::Launch;
 use nes_tools::query::SubmitQueryResponse;
 use nes_tools::topology::{
@@ -1920,6 +1920,9 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
     let tuple_size = std::mem::size_of::<OutputTuple>();
     let valid_bytes = buf.len() - (buf.len() % tuple_size);
     let mut lock = file.lock().unwrap();
+    
+    let mut seen_seq_nunbers = HashSet::new();
+    
 
     match output_type {
         OutputType::CSV => {
@@ -1951,6 +1954,16 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
                 let binary_tuple = &buf[i..i + tuple_size];
 
                 let output_tuple = OutputTuple::from_bytes(binary_tuple);
+                
+                assert_eq!(output_tuple.sequence_number_1, output_tuple.sequence_number_2);
+                assert_eq!(output_tuple.join_id_1, output_tuple.sequence_number_1 * 1000);
+                assert_eq!(output_tuple.join_id_2, output_tuple.sequence_number_2 * 1000);
+                assert_ne!(output_tuple.id_1, output_tuple.id_2);
+                if seen_seq_nunbers.contains(&output_tuple.sequence_number_1) {
+                    // dbg!(seen_seq_nunbers);
+                    println!("Duplicate sequence number found: {} tuple count {}", output_tuple.sequence_number_1, lines);
+                }
+                seen_seq_nunbers.insert(output_tuple.sequence_number_1);
 
                 lock.write(output_tuple)?;
                 lines += 1;
@@ -2189,6 +2202,7 @@ pub fn get_expected_join_output_count(
     window_size: u64,
     join_match_interval: u64,
 ) -> u64 {
+    println!("num tuples: {}", num_tuples);
     let finished_windows = (num_tuples  - 1) / window_size;
     println!("finished windows: {}", finished_windows);
     let processed_tuples = finished_windows * window_size;
@@ -2196,10 +2210,10 @@ pub fn get_expected_join_output_count(
     
     //the seq nr starts at zero so the index that we match on is actually one less than the number of tuples
     //we always match the zero so we need to always add one
-    let matchted_tuples = ((processed_tuples - 1) / join_match_interval) + 1;
-    println!("matched tuples: {}", matchted_tuples);
-    
-    matchted_tuples
+    let matched_tuples = ((processed_tuples - 1) / join_match_interval) + 1;
+    println!("matched tuples: {}", matched_tuples);
+
+    matched_tuples
 }
 
 #[cfg(test)]

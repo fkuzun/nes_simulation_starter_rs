@@ -4,14 +4,10 @@ enable_query_reconfiguration = [false]
 enable_proactive_deployment = [false]
 #tuples_per_buffer = [200, 400, 800]
 tuples_per_buffer = [1]
-#tuples_per_buffer = [50]
-#tuples_per_buffer = [150]
-#tuples_per_buffer = [10]
-#gathering_interval = [1, 5, 10]
 gathering_interval = [100]
 speedup_factor = [1]
 #placementAmendmentThreadCount = [1, 8]
-placementAmendmentThreadCount = [1,8]
+placementAmendmentThreadCount = [1]
 #placementAmendmentThreadCount = [1]
 
 [default_config.parameters]
@@ -22,7 +18,7 @@ reconnect_start_offset = 40
 amount_of_reconnects = 10
 speedup_factor = 1.0
 deployment_time_offset = 20
-warmup = 20
+warmup = 5
 #reconnect_runtime = 30
 reconnect_runtime = 120
 cooldown_time = 30
@@ -37,7 +33,7 @@ join_match_interval = 7
 window_size = 10
 query_string = "Query::from(\"{INPUT1}\").joinWith(Query::from(\"{INPUT2}\")).where(Attribute(\"join_id\") == Attribute(\"join_id\")).window(TumblingWindow::of(EventTime(Attribute(\"value\")), Milliseconds({WINDOW_SIZE})))"
 
-place_default_sources_on_node_ids_path = "/home/x/rustProjects/nes_simulation_starter_rs/join_experiments/synthetic_2_src_2_change_per_query_sec_120_runtime_1sec_freq/source_groups.json"
+place_default_sources_on_node_ids_path = "/home/x/rustProjects/nes_simulation_starter_rs/join_experiments/synthetic_2_src_2_change_per_query_sec_120_runtime_10sec_freq/source_groups.json"
 
 num_worker_threads = 1
 

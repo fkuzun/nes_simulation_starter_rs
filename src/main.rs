@@ -294,6 +294,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
                             let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
                             query_strings.push(tcp_sink);
+                            //break;
                         }
                         }
                     } else {
