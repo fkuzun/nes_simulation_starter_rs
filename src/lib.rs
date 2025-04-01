@@ -1959,11 +1959,12 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
                 assert_eq!(output_tuple.join_id_1, output_tuple.sequence_number_1 * 1000);
                 assert_eq!(output_tuple.join_id_2, output_tuple.sequence_number_2 * 1000);
                 assert_ne!(output_tuple.id_1, output_tuple.id_2);
-                if seen_seq_nunbers.contains(&output_tuple.sequence_number_1) {
+                let seen_check = (output_tuple.id_1, output_tuple.sequence_number_1);
+                if seen_seq_nunbers.contains(&seen_check) {
                     // dbg!(seen_seq_nunbers);
                     println!("Duplicate sequence number found: {} tuple count {}", output_tuple.sequence_number_1, lines);
                 }
-                seen_seq_nunbers.insert(output_tuple.sequence_number_1);
+                seen_seq_nunbers.insert(seen_check);
 
                 lock.write(output_tuple)?;
                 lines += 1;
