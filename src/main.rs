@@ -315,7 +315,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     dbg!(&query_strings);
-                    let desired_line_count_per_thread = experiment.total_number_of_tuples_to_emit / query_string.len() as u64;
+                    let desired_line_count_per_thread = experiment.total_number_of_tuples_to_emit / query_strings.len() as u64;
                     std::thread::sleep(Duration::from_secs(10));
 
                     // Use the runtime
