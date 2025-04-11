@@ -1873,17 +1873,19 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
         //while let Ok(bytes_read) = reader.read_line(&mut line).await {
         //exit if shutdown was triggered
         if shutdown_triggered.load(SeqCst) {
+            println!("shutdown triggered, exiting tuple reader loop");
             break;
         }
         
         if buf.len() / tuple_size >= desired_line_count as usize {
-            println!("All tuples received for thread, proceeding to write avro");
+            println!("All tuples received for thread, exiting tuple reader loop");
             break;
         }
 
         let current_time = SystemTime::now();
         if let Ok(elapsed_time) = current_time.duration_since(start_time) {
             if elapsed_time > experiment_duration {
+                println!("Timout reached, exiting tuple reader loop");
                 break;
             }
         }
@@ -1903,7 +1905,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
 
     //let mut reader = tokio::io::BufReader::new(&*buf);
 
-    println!("Timeout, counting tuples an writing file");
+    println!("Counting tuples an writing file");
 
     //count all line breaks in the received buffer
     // let mut current_valid_byte_count = 0;
