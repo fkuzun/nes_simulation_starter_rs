@@ -376,7 +376,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         println!("Error accepting connection: {}", e);
                                     }
                                     Err(e) => {
-                                        println!("Could not establish connection within timeout: {}", e);
+                                        println!("Could not establish connection during this loop iteration ({}) proceeding with check if we can finish the experiment now", e);
                                     }
                                 }
                                 println!("Completed threads: {}, Spawned threads {}", completed_threads.load(SeqCst) ,num_spawned);
