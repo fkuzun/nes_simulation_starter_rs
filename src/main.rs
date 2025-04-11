@@ -335,8 +335,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                             while !shutdown_triggered.load(Ordering::SeqCst) {
                                 //let timeout_duration = experiment_duration * 2;
                                 // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
-                                // let timeout_duration = experiment_duration + Duration::from_secs(60);
-                                let timeout_duration = experiment_duration;
+                                let timeout_duration = experiment_duration + Duration::from_secs(60);
+                                //let timeout_duration = experiment_duration;
                                 let accept_result =
                                     timeout(timeout_duration, listener.accept()).await;
 
@@ -375,7 +375,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     Ok(Err(e)) => {
                                         eprintln!("Error accepting connection: {}", e);
                                     }
-                                    Err(_) => {
+                                    Err(e) => {
+                                        eprintln!("Could not establish connection within timeout: {}", e);
                                         break;
                                     }
                                 }
