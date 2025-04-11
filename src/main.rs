@@ -379,6 +379,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         println!("Could not establish connection within timeout: {}", e);
                                     }
                                 }
+                                println!("Completed threads: {}, Spawned threads {}", completed_threads.load(SeqCst) ,num_spawned);
                             }
                             loop {
                                 let current_time = SystemTime::now();
