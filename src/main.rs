@@ -335,10 +335,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                             while !shutdown_triggered.load(Ordering::SeqCst) && ((completed_threads.load(SeqCst) < num_spawned) || num_spawned == 0) {
                                 //let timeout_duration = experiment_duration * 2;
                                 // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
-                                let timeout_duration = Duration::from_secs(20);
-                                //let timeout_duration = experiment_duration;
+                                let reconnect_timout = Duration::from_secs(20);
+                                let timeout_duration = experiment_duration;
                                 let accept_result =
-                                    timeout(timeout_duration, listener.accept()).await;
+                                    timeout(reconnect_timout, listener.accept()).await;
 
                                 match accept_result {
                                     Ok(Ok((stream, _))) => {

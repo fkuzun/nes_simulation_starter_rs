@@ -1885,7 +1885,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
         let current_time = SystemTime::now();
         if let Ok(elapsed_time) = current_time.duration_since(start_time) {
             if elapsed_time > experiment_duration {
-                println!("Timout reached, exiting tuple reader loop");
+                println!("Timeout reached, exiting tuple reader loop");
                 break;
             }
         }
