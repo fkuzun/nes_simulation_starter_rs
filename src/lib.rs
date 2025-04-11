@@ -1855,6 +1855,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
     stream: tokio::net::TcpStream,
     line_count: Arc<AtomicUsize>,
     desired_line_count: u64,
+    desired_line_count_total: u64,
     file: Arc<Mutex<W>>,
     shutdown_triggered: Arc<AtomicBool>,
     start_time: SystemTime,
@@ -1865,7 +1866,8 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
     //let mut reader = tokio::io::BufReader::new(stream);
     //let mut line = String::new();
     let mut buf = vec![];
-
+    let mut lines = 0;
+    let tuple_size = std::mem::size_of::<OutputTuple>();
     // Iterate over the lines received from the client and write them to the CSV file
     loop {
         //while let Ok(bytes_read) = reader.read_line(&mut line).await {
@@ -1873,6 +1875,11 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
         if shutdown_triggered.load(SeqCst) {
             break;
         }
+        
+        if buf.len() / tuple_size >= desired_line_count as usize {
+            break;
+        }
+
         let current_time = SystemTime::now();
         if let Ok(elapsed_time) = current_time.duration_since(start_time) {
             if elapsed_time > experiment_duration {
@@ -1917,7 +1924,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
     // }
     //file.write_all(&buf[0..total_valid_byte_count])?;
 
-    let tuple_size = std::mem::size_of::<OutputTuple>();
+
     let valid_bytes = buf.len() - (buf.len() % tuple_size);
     let mut lock = file.lock().unwrap();
     
@@ -1948,7 +1955,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
             }
         }
         OutputType::AVRO => {
-            let mut lines = 0;
+
             for i in (0..valid_bytes).step_by(tuple_size) {
                 line_count.fetch_add(1, Ordering::SeqCst);
                 let binary_tuple = &buf[i..i + tuple_size];
@@ -1995,9 +2002,11 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
     }
 
     println!(
-        "Received {} lines of {}",
+        "Received {} lines of {} ({} of total {})",
+        lines,
+        desired_line_count,
         line_count.load(SeqCst),
-        desired_line_count
+        desired_line_count_total,
     );
 
     Ok(())

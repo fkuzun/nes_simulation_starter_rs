@@ -205,6 +205,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                     let desired_line_count = experiment.total_number_of_tuples_to_emit;
+
                     
                     // Bind the TCP listener to the specified address and port
 
@@ -314,6 +315,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     dbg!(&query_strings);
+                    let desired_line_count_per_thread = experiment.total_number_of_tuples_to_emit / query_string.len() as u64;
                     std::thread::sleep(Duration::from_secs(10));
 
                     // Use the runtime
@@ -355,6 +357,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             if let Err(e) = handle_connection(
                                                 stream,
                                                 line_count_clone,
+                                                desired_line_count_per_thread,
                                                 desired_line_count_copy,
                                                 file_clone.clone(),
                                                 shutdown_triggered_clone,
