@@ -394,14 +394,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         break;
                                     }
                                     println!(
-                                        "timeout not reached, waiting for tupels to be written"
+                                        "timeout not reached, waiting for tuples to be written"
                                     );
                                     println!(
                                         "{} threads of {} completed",
                                         completed_threads.load(SeqCst),
                                         num_spawned
                                     );
-                                    sleep(Duration::from_secs(5));
+                                    tokio::time::sleep(Duration::from_secs(5)).await;
                                 }
                             }
                             //check timeout
