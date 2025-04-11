@@ -332,8 +332,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         //if let Ok(true) = deployed {
                         let mut num_spawned = 0;
                         {
-                            while !shutdown_triggered.load(Ordering::SeqCst) || (completed_threads.load(SeqCst) == num_spawned
-                                && num_spawned > 0) {
+                            while !shutdown_triggered.load(Ordering::SeqCst) && ((completed_threads.load(SeqCst) < num_spawned) || num_spawned == 0) {
                                 //let timeout_duration = experiment_duration * 2;
                                 // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
                                 let timeout_duration = experiment_duration + Duration::from_secs(20);
