@@ -1877,6 +1877,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
         }
         
         if buf.len() / tuple_size >= desired_line_count as usize {
+            println!("All tuples received for thread, proceeding to write avro");
             break;
         }
 
