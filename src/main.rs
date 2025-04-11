@@ -332,10 +332,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                         //if let Ok(true) = deployed {
                         let mut num_spawned = 0;
                         {
-                            while !shutdown_triggered.load(Ordering::SeqCst) {
+                            while !shutdown_triggered.load(Ordering::SeqCst) || (completed_threads.load(SeqCst) == num_spawned
+                                && num_spawned > 0) {
                                 //let timeout_duration = experiment_duration * 2;
                                 // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
-                                let timeout_duration = experiment_duration + Duration::from_secs(60);
+                                let timeout_duration = experiment_duration + Duration::from_secs(20);
                                 //let timeout_duration = experiment_duration;
                                 let accept_result =
                                     timeout(timeout_duration, listener.accept()).await;
@@ -373,11 +374,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         });
                                     }
                                     Ok(Err(e)) => {
-                                        eprintln!("Error accepting connection: {}", e);
+                                        println!("Error accepting connection: {}", e);
                                     }
                                     Err(e) => {
-                                        eprintln!("Could not establish connection within timeout: {}", e);
-                                        break;
+                                        println!("Could not establish connection within timeout: {}", e);
                                     }
                                 }
                             }
