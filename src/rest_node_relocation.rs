@@ -3,8 +3,7 @@ use std::collections::{btree_map, BTreeMap};
 use std::error::Error;
 use std::ops::Add;
 use std::time;
-
-
+use chrono::Duration;
 use reqwest::{Url};
 use serde::{Deserialize, Serialize};
 
@@ -119,10 +118,11 @@ pub struct REST_topology_updater {
     speedup: f64,
     url: Url,
     client: reqwest::blocking::Client,
+    max_runtime: time::Duration,
 }
 
 impl REST_topology_updater {
-    pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, speedup: f64, url: Url, initial_updates: Vec<(u64, u64)>) -> Self {
+    pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, speedup: f64, url: Url, initial_updates: Vec<(u64, u64)>, max_runtime: time::Duration) -> Self {
         Self {
             topology_updates,
             start_time,
@@ -130,6 +130,7 @@ impl REST_topology_updater {
             url,
             client: reqwest::blocking::Client::new(),
             initial_updates,
+            max_runtime
         }
     }
 
@@ -169,14 +170,18 @@ impl REST_topology_updater {
     fn run(self) -> Vec<time::Duration> {
         println!("Starting central topology updates. {} updates in list", self.topology_updates.len());
         let mut actual_calls = vec![];
+
+        let abort_time = self.start_time.add(self.max_runtime);
         for update in &self.topology_updates {
-            // dbg!(update); 
-            //if (update.timestamp.as_nanos() == 0) {
-            //    continue;
-            //}
             let update_time = update.timestamp.mul_f64(self.speedup);
             let update_time = update_time.add(self.start_time);
             let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
+
+            if now > abort_time {
+                println!("Reached maximum reconnect time before last reconnect was reached. Omitting remaining reconnects in list");
+                break
+            }
+
             while now < update_time {
                 // println!("{} < {}  Waiting for next update, going to sleep for {} seconds", now.as_secs(), update_time.as_secs(), (update_time - now).as_secs());
                 std::thread::sleep(update_time - now);

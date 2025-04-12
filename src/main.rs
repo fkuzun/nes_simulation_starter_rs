@@ -195,6 +195,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .unwrap(),
                     // experiment.initial_topology_update.as_ref().unwrap().clone());
                     experiment.simulated_reconnects.initial_parents.clone(),
+                    experiment.input_config.parameters.reconnect_runtime
                 );
                 //todo: check if we need to join this thread
                 print_topology(rest_port).unwrap();
