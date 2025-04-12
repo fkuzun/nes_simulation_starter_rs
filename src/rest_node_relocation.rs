@@ -176,6 +176,7 @@ impl REST_topology_updater {
             let update_time = update.timestamp.mul_f64(self.speedup);
             let update_time = update_time.add(self.start_time);
 
+            println!("Update time {:?}, abort time {:?}", update_time, abort_time);
             if update_time > abort_time {
                 println!("Reached maximum reconnect time before last reconnect was reached. Omitting remaining reconnects in list");
                 break
