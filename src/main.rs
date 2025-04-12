@@ -187,7 +187,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     reconnect_start
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap(),
-                    Duration::from_millis(10),
+                    experiment.input_config.parameters.speedup_factor,
                     Url::parse(&format!(
                         "http://127.0.0.1:{}/v1/nes/topology/update",
                         &rest_port.to_string()

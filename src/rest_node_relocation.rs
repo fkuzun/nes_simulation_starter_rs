@@ -116,17 +116,17 @@ pub struct REST_topology_updater {
     topology_updates: Vec<TopologyUpdate>,
     initial_updates: Vec<(u64, u64)>,
     start_time: time::Duration,
-    interval: time::Duration,
+    speedup: f64,
     url: Url,
     client: reqwest::blocking::Client,
 }
 
 impl REST_topology_updater {
-    pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, interval: time::Duration, url: Url, initial_updates: Vec<(u64, u64)>) -> Self {
+    pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, speedup: f64, url: Url, initial_updates: Vec<(u64, u64)>) -> Self {
         Self {
             topology_updates,
             start_time,
-            interval,
+            speedup,
             url,
             client: reqwest::blocking::Client::new(),
             initial_updates,
@@ -174,7 +174,8 @@ impl REST_topology_updater {
             //if (update.timestamp.as_nanos() == 0) {
             //    continue;
             //}
-            let update_time = update.timestamp.add(self.start_time);
+            let update_time = update.timestamp.mul_f64(self.speedup);
+            let update_time = update_time.add(self.start_time);
             let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             while now < update_time {
                 // println!("{} < {}  Waiting for next update, going to sleep for {} seconds", now.as_secs(), update_time.as_secs(), (update_time - now).as_secs());
@@ -182,7 +183,7 @@ impl REST_topology_updater {
                 now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             }
             if let Ok(_) = self.send_topology_update(update) {
-                // println!("Sent update at {:?}", now);
+                println!("Sent update at {:?}", now);
                 actual_calls.push(now);
             } else {
                 println!("failed to send update, returning");
