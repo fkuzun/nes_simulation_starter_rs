@@ -175,13 +175,13 @@ impl REST_topology_updater {
         for update in &self.topology_updates {
             let update_time = update.timestamp.mul_f64(self.speedup);
             let update_time = update_time.add(self.start_time);
-            let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
 
-            if now > abort_time {
+            if update_time > abort_time {
                 println!("Reached maximum reconnect time before last reconnect was reached. Omitting remaining reconnects in list");
                 break
             }
 
+            let mut now = time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap();
             while now < update_time {
                 // println!("{} < {}  Waiting for next update, going to sleep for {} seconds", now.as_secs(), update_time.as_secs(), (update_time - now).as_secs());
                 std::thread::sleep(update_time - now);
