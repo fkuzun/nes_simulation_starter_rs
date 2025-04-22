@@ -1071,6 +1071,38 @@ impl InputConfig {
                 ],
             });
         }
+        
+        println!("register fake_migration_source");
+        logicalSources.push(LogicalSource {
+            logicalSourceName: "fake_migration_source".to_owned(),
+            fields: vec![
+                LogicalSourceField {
+                    name: "id".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "join_id".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "value".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "event_timestamp".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "processing_timestamp".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "output_timestamp".to_string(),
+                    Type: UINT64,
+                },
+            ],
+        });
+
 
         println!("generating coordinator config");
         //generate coordinator config
@@ -1130,6 +1162,7 @@ impl InputConfig {
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
+                enableIncrementalPlacement: self.parameters.enable_query_reconfiguration
             };
             let yaml_path =
                 output_worker_config_directory.join(format!("fixed_worker{}.yaml", input_id));
@@ -1208,6 +1241,7 @@ impl InputConfig {
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
+                enableIncrementalPlacement: self.parameters.enable_query_reconfiguration
             };
             let yaml_path =
                 output_worker_config_directory.join(format!("mobile_worker{}.yaml", input_id));
@@ -1509,6 +1543,7 @@ struct MobileWorkerConfig {
     fieldNodeLocationCoordinates: String,
     logLevel: LogLevel,
     numWorkerThreads: u64,
+    enableIncrementalPlacement: bool
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1527,6 +1562,7 @@ struct FixedWorkerConfig {
     logLevel: LogLevel,
     numWorkerThreads: u64,
     //fieldNodeLocationCoordinates: (f64, f64),
+    enableIncrementalPlacement: bool
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
