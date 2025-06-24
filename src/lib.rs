@@ -153,6 +153,7 @@ pub struct MultiSimulationInputConfig {
     placementAmendmentThreadCount: Vec<u16>,
     #[serde_as(as = "Vec<DurationMilliSeconds<u64>>")]
     pub gathering_interval: Vec<Duration>,
+    pub window_size: Vec<u64>,
     pub default_config: InputConfig,
     pub analysis_script: Option<RelativePathBuf>,
 }
@@ -185,6 +186,10 @@ impl MultiSimulationInputConfig {
 
     pub fn get_amnenment_threads_short_name(&self) -> String {
         String::from("amendmentThreads")
+    }
+    
+    pub fn get_window_size_short_name(&self) -> String {
+        String::from("windowSize")
     }
 
     pub fn get_short_name_value_separator(&self) -> String {
@@ -219,63 +224,73 @@ impl MultiSimulationInputConfig {
                 for &tuples_per_buffer in &self.tuples_per_buffer {
                     for &gathering_interval in &self.gathering_interval {
                         for &speedup_factor in &self.speedup_factor {
-                            for &placementAmendmentThreadCount in
-                                &self.placementAmendmentThreadCount
+                            for &window_size in
+                                &self.window_size
                             {
-                                if enable_query_reconfiguration
-                                    && placementAmendmentThreadCount == 1
+                                for &placementAmendmentThreadCount in
+                                    &self.placementAmendmentThreadCount
                                 {
-                                    println!("skipping config with reconfiguration enabled and only one amendment thread");
-                                    continue;
-                                }
-                                let config = InputConfig {
-                                    parameters: Parameters {
-                                        enable_query_reconfiguration,
-                                        enable_proactive_deployment,
-                                        speedup_factor,
-                                        placementAmendmentThreadCount,
-                                        //source_input_server_port,
-                                        ..self.default_config.parameters.clone()
-                                    },
-                                    default_source_input: DefaultSourceInput {
-                                        tuples_per_buffer,
-                                        gathering_interval,
-                                        ..self.default_config.default_source_input.clone()
-                                    },
-                                    ..self.default_config.clone()
-                                };
+                                    if enable_query_reconfiguration
+                                        && placementAmendmentThreadCount == 1
+                                    {
+                                        println!("skipping config with reconfiguration enabled and only one amendment thread");
+                                        continue;
+                                    }
+                                    let config = InputConfig {
+                                        parameters: Parameters {
+                                            enable_query_reconfiguration,
+                                            enable_proactive_deployment,
+                                            speedup_factor,
+                                            placementAmendmentThreadCount,
+                                            window_size,
+                                            //source_input_server_port,
+                                            ..self.default_config.parameters.clone()
+                                        },
+                                        default_source_input: DefaultSourceInput {
+                                            tuples_per_buffer,
+                                            gathering_interval,
+                                            ..self.default_config.default_source_input.clone()
+                                        },
+                                        ..self.default_config.clone()
+                                    };
 
-                                //source_input_server_port += 1;
-                                let mut short_name = self.get_short_name_with_value(
-                                    &self.get_reconfig_short_name(),
-                                    &enable_query_reconfiguration.to_string(),
-                                );
-                                short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(
-                                    &self.get_proactive_short_name(),
-                                    &enable_proactive_deployment.to_string(),
-                                ));
-                                short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(
-                                    &self.get_tuples_per_buffer_short_name(),
-                                    &tuples_per_buffer.to_string(),
-                                ));
-                                short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(
-                                    &self.get_gathering_interval_short_name(),
-                                    &gathering_interval.as_millis().to_string(),
-                                ));
-                                short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(
-                                    &self.get_speedup_short_name(),
-                                    &speedup_factor.to_string(),
-                                ));
-                                short_name.push_str(&self.get_short_name_to_short_name_separator());
-                                short_name.push_str(&self.get_short_name_with_value(
-                                    &self.get_amnenment_threads_short_name(),
-                                    &placementAmendmentThreadCount.to_string(),
-                                ));
-                                configs.push((short_name, config, (0..number_of_runs).collect()));
+                                    //source_input_server_port += 1;
+                                    let mut short_name = self.get_short_name_with_value(
+                                        &self.get_reconfig_short_name(),
+                                        &enable_query_reconfiguration.to_string(),
+                                    );
+                                    short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                    short_name.push_str(&self.get_short_name_with_value(
+                                        &self.get_proactive_short_name(),
+                                        &enable_proactive_deployment.to_string(),
+                                    ));
+                                    short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                    short_name.push_str(&self.get_short_name_with_value(
+                                        &self.get_tuples_per_buffer_short_name(),
+                                        &tuples_per_buffer.to_string(),
+                                    ));
+                                    short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                    short_name.push_str(&self.get_short_name_with_value(
+                                        &self.get_gathering_interval_short_name(),
+                                        &gathering_interval.as_millis().to_string(),
+                                    ));
+                                    short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                    short_name.push_str(&self.get_short_name_with_value(
+                                        &self.get_speedup_short_name(),
+                                        &speedup_factor.to_string(),
+                                    ));
+                                    short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                    short_name.push_str(&self.get_short_name_with_value(
+                                        &self.get_amnenment_threads_short_name(),
+                                        &placementAmendmentThreadCount.to_string(),
+                                    ));
+                                    short_name.push_str(&self.get_short_name_to_short_name_separator());
+                                    short_name.push_str(&self.get_short_name_with_value(
+                                        &self.get_window_size_short_name(),
+                                        &window_size.to_string(),
+                                    ));
+                                    configs.push((short_name, config, (0..number_of_runs).collect()));
+                                }
                             }
                         }
                     }
