@@ -1014,7 +1014,7 @@ impl InputConfig {
         println!("generating logical sources");
         let place_default_sources_on_node_ids =
             fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path)
-                .expect(&format!("Failed to read place_default_sources_on_node_ids from path {}", &self.parameters.place_default_sources_on_node_ids_path));
+                .expect(&format!("Failed to read place_default_sources_on_node_ids from path {}", &self.parameters.place_default_sources_on_node_ids_path.to_str().unwrap()));
         let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> =
             serde_json::from_str(&place_default_sources_on_node_ids)
                 .expect("could not parse map of sourcees to nodes");
