@@ -227,7 +227,8 @@ impl MultiSimulationInputConfig {
                             for &window_size in
                                 &self.window_size
                             {
-                                for &placementAmendmentThreadCount in
+                                let input_batch_size_multiplicator = window_size / 10;
+                                    for &placementAmendmentThreadCount in
                                     &self.placementAmendmentThreadCount
                                 {
                                     if enable_query_reconfiguration
@@ -247,7 +248,7 @@ impl MultiSimulationInputConfig {
                                             ..self.default_config.parameters.clone()
                                         },
                                         default_source_input: DefaultSourceInput {
-                                            tuples_per_buffer,
+                                            tuples_per_buffer: tuples_per_buffer * input_batch_size_multiplicator as usize,
                                             gathering_interval,
                                             ..self.default_config.default_source_input.clone()
                                         },
@@ -1013,7 +1014,7 @@ impl InputConfig {
         println!("generating logical sources");
         let place_default_sources_on_node_ids =
             fs::read_to_string(&self.parameters.place_default_sources_on_node_ids_path)
-                .expect("Failed to read place_default_sources_on_node_ids");
+                .expect(&format!("Failed to read place_default_sources_on_node_ids from path {}", &self.parameters.place_default_sources_on_node_ids_path));
         let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> =
             serde_json::from_str(&place_default_sources_on_node_ids)
                 .expect("could not parse map of sourcees to nodes");
