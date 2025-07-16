@@ -689,6 +689,7 @@ impl ExperimentSetup {
     ) -> Result<(), Box<dyn Error>> {
         for query_string in query_strings {
             Self::submit_query(output_port, query_string)?;
+            sleep(Duration::from_secs(10));
         }
 
         // //create vector of ExecuteQueryRequests
