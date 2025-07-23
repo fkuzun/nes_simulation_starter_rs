@@ -126,6 +126,8 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
         if !reply.success {
             return Err("Could not add edge".into());
         }
+        println!("sleeping");
+        sleep(Duration::from_secs(1));
     };
     Ok(())
 }
