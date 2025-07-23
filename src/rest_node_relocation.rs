@@ -163,7 +163,7 @@ impl REST_topology_updater {
         //let initial_update = self.topology_updates.first().unwrap();
         let rest_port = self.url.port().unwrap();
         println!("Adding initial mobile edges");
-        add_edges_from_list(&rest_port, &self.initial_updates)
+        add_edges_from_list(&rest_port, &self.initial_updates, true)
     }
 
     fn run(self) -> Vec<time::Duration> {

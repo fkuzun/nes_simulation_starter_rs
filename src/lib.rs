@@ -96,7 +96,7 @@ fn port_is_available(port: u16) -> bool {
     }
 }
 
-pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(), Box<dyn Error>> {
+pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>, shouldRemoveLink: bool) -> Result<(), Box<dyn Error>> {
     let client = reqwest::blocking::Client::new();
     for (parent_id, child_id) in edges {
         if parent_id == &1 {
@@ -107,28 +107,35 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
             parent_id: *parent_id,
             child_id: *child_id,
         };
-        let result = client.post(format!("http://127.0.0.1:{}/v1/nes/topology/addAsChild", &rest_port.to_string()))
-            .json(&link_request).send()?;
-        //println!("{}", result.text().unwrap());
-        let reply: AddEdgeReply = result.json()?;
-        dbg!(&reply);
-        if !reply.success {
-            return Err("Could not add edge".into());
-        }
-        let link_request = AddEdgeRequest {
-            parent_id: 1,
-            child_id: *child_id,
-        };
-        let result = client.delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
-            .json(&link_request).send()?;
-        //assert!(result.json().unwrap());
+        let result = client
+            .post(format!(
+                "http://127.0.0.1:{}/v1/nes/topology/addAsChild",
+                &rest_port.to_string()
+            ))
+            .json(&link_request)
+            .send()?;
+
         let reply: AddEdgeReply = result.json()?;
         if !reply.success {
             return Err("Could not add edge".into());
         }
-        println!("sleeping");
-        sleep(Duration::from_secs(1));
-    };
+
+        if shouldRemoveLink {
+            let link_request = AddEdgeRequest {
+                parent_id: 1,
+                child_id: *child_id,
+            };
+            let result = client
+                .delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
+                .json(&link_request)
+                .send()?;
+            //assert!(result.json().unwrap());
+            let reply: AddEdgeReply = result.json()?;
+            if !reply.success {
+                return Err("Could not add edge".into());
+            }
+        }
+    }
     Ok(())
 }
 
@@ -668,7 +675,7 @@ impl ExperimentSetup {
         //wait_for_topology(Some(self.fixed_worker_processes.len() + 1 + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
         println!("adding fixed edges");
-        self.add_edges(rest_port)?;
+        self.add_edges(rest_port, false)?;
 
         //wait for user to press key to start mobile workers
         // println!("press any key to start mobile workers");
@@ -745,9 +752,9 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    fn add_edges(&self, rest_port: u16) -> Result<(), Box<dyn Error>> {
+    fn add_edges(&self, rest_port: u16, shouldRemoveLink: bool) -> Result<(), Box<dyn Error>> {
         let edges = &self.edges;
-        add_edges_from_list(&rest_port, edges)
+        add_edges_from_list(&rest_port, edges, shouldRemoveLink)
     }
 
 
