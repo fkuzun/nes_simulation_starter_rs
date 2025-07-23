@@ -111,6 +111,7 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
             .json(&link_request).send()?;
         //println!("{}", result.text().unwrap());
         let reply: AddEdgeReply = result.json()?;
+        dbg!(&reply);
         if !reply.success {
             return Err("Could not add edge".into());
         }
@@ -683,29 +684,45 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    pub fn submit_queries(output_port: u16, query_strings: Vec<String>) -> Result<(), Box<dyn Error>> {
-        // for query_string in query_strings {
-        //     Self::submit_query(output_port, query_string)?;
-        // }
-
-        //create vector of ExecuteQueryRequests
-        let mut execute_query_requests = vec![];
-
-        //iterate over query strings
+    pub fn submit_queries(
+        output_port: u16,
+        query_strings: Vec<String>,
+    ) -> Result<(), Box<dyn Error>> {
         for query_string in query_strings {
-            let execute_query_request = ExecuteQueryRequest {
-                user_query: query_string.replace("{OUTPUT}", &output_port.to_string()),
-                placement: PlacementStrategyType::BottomUp,
-            };
-            execute_query_requests.push(execute_query_request);
+            Self::submit_query(output_port, query_string)?;
+            sleep(Duration::from_secs(10));
         }
-        let client = reqwest::blocking::Client::new();
-        let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-multiple-queries")
-            .json(&execute_query_requests).send()?;
-        let reply: SubmitQueryResponse = result.json()?;
-        if reply.queryId == 0 {
-            return Err("Could not submit query, received invalid query id 0".into());
-        };
+
+        // //create vector of ExecuteQueryRequests
+        // let mut execute_query_requests = vec![];
+        //
+        // //iterate over query strings
+        // for query_string in query_strings {
+        //     let execute_query_request = ExecuteQueryRequest {
+        //         user_query: query_string.replace("{OUTPUT}", &output_port.to_string()),
+        //         placement: PlacementStrategyType::BottomUp,
+        //     };
+        //     execute_query_requests.push(execute_query_request);
+        // }
+        // let client = reqwest::blocking::Client::new();
+        // let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-multiple-queries")
+        //     .json(&execute_query_requests).send()?;
+        // let reply: SubmitQueryResponse = result.json()?;
+        // if reply.queryId == 0 {
+        //     return Err("Could not submit query, received invalid query id 0".into());
+        // };
+        Ok(())
+    }
+
+    pub async fn submit_queries_async(
+        output_port: u16,
+        query_strings: Vec<String>,
+    ) -> Result<(), Box<dyn Error>> {
+        for query_string in query_strings {
+            Self::submit_query(output_port, query_string)?;
+            println!("submit query successful");
+            tokio::time::sleep(Duration::from_secs(100)).await;
+        }
         Ok(())
     }
 
@@ -715,8 +732,10 @@ impl ExperimentSetup {
             placement: PlacementStrategyType::BottomUp,
         };
         let client = reqwest::blocking::Client::new();
-        let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-query")
-            .json(&execute_query_request).send()?;
+        let result = client
+            .post("http://127.0.0.1:8081/v1/nes/query/execute-query")
+            .json(&execute_query_request)
+            .send()?;
         let reply: SubmitQueryResponse = result.json()?;
         if reply.queryId == 0 {
             return Err("Could not submit query, received invalid query id 0".into());
