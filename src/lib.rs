@@ -97,7 +97,7 @@ fn port_is_available(port: u16) -> bool {
     }
 }
 
-pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(), Box<dyn Error>> {
+pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>, shouldRemoveLink: bool) -> Result<(), Box<dyn Error>> {
     let client = reqwest::blocking::Client::new();
     for (parent_id, child_id) in edges {
         if parent_id == &1 {
@@ -115,23 +115,26 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
             ))
             .json(&link_request)
             .send()?;
-        //println!("{}", result.text().unwrap());
+
         let reply: AddEdgeReply = result.json()?;
         if !reply.success {
             return Err("Could not add edge".into());
         }
-        let link_request = AddEdgeRequest {
-            parent_id: 1,
-            child_id: *child_id,
-        };
-        let result = client
-            .delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
-            .json(&link_request)
-            .send()?;
-        //assert!(result.json().unwrap());
-        let reply: AddEdgeReply = result.json()?;
-        if !reply.success {
-            return Err("Could not add edge".into());
+
+        if shouldRemoveLink {
+            let link_request = AddEdgeRequest {
+                parent_id: 1,
+                child_id: *child_id,
+            };
+            let result = client
+                .delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
+                .json(&link_request)
+                .send()?;
+            //assert!(result.json().unwrap());
+            let reply: AddEdgeReply = result.json()?;
+            if !reply.success {
+                return Err("Could not add edge".into());
+            }
         }
     }
     Ok(())
@@ -773,7 +776,13 @@ impl ExperimentSetup {
         //wait_for_topology(Some(self.fixed_worker_processes.len() + 1 + 1), Arc::clone(&shutdown_triggered), rest_port)?;
 
         println!("adding fixed edges");
-        self.add_edges(rest_port)?;
+        self.add_edges(rest_port, false)?;
+
+        wait_for_topology(
+            Some(self.fixed_worker_processes.len() + 1),
+            Arc::clone(&shutdown_triggered),
+            rest_port,
+        )?;
 
         //wait for user to press key to start mobile workers
         // println!("press any key to start mobile workers");
@@ -844,9 +853,9 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    fn add_edges(&self, rest_port: u16) -> Result<(), Box<dyn Error>> {
+    fn add_edges(&self, rest_port: u16, shouldRemoveLink: bool) -> Result<(), Box<dyn Error>> {
         let edges = &self.edges;
-        add_edges_from_list(&rest_port, edges)
+        add_edges_from_list(&rest_port, edges, shouldRemoveLink)
     }
 
     pub fn kill_processes(&mut self) -> Result<(), Box<dyn Error>> {
@@ -1029,8 +1038,10 @@ impl InputConfig {
             let mut source_count_map = HashMap::<String, u64>::new();
 
             for v in place_default_sources_on_node_ids.into_values().flatten() {
+                println!("Processing node: {}", v);  // Track exactly what's counted
                 let source_count = source_count_map.entry(v.clone()).or_insert(0);
                 *source_count += 1;
+                println!("Current count for {}: {}", v, source_count);
 
                 names.push(format!("{}s{}", v, source_count));
             }
@@ -1071,6 +1082,38 @@ impl InputConfig {
                 ],
             });
         }
+        
+        println!("register fake_migration_source");
+        logicalSources.push(LogicalSource {
+            logicalSourceName: "fake_migration_source".to_owned(),
+            fields: vec![
+                LogicalSourceField {
+                    name: "id".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "join_id".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "value".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "event_timestamp".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "processing_timestamp".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "output_timestamp".to_string(),
+                    Type: UINT64,
+                },
+            ],
+        });
+
 
         println!("generating coordinator config");
         //generate coordinator config
@@ -1114,7 +1157,7 @@ impl InputConfig {
                 numberOfTuplesToProducePerBuffer,
                 num_buffers,
                 &mut total_number_of_tuples_to_emit,
-                *input_id + 1,
+                *input_id,
             );
             let worker_config = FixedWorkerConfig {
                 // rpcPort: next_free_port,
@@ -1130,6 +1173,7 @@ impl InputConfig {
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
+                enableIncrementalPlacement: self.parameters.enable_query_reconfiguration
             };
             let yaml_path =
                 output_worker_config_directory.join(format!("fixed_worker{}.yaml", input_id));
@@ -1171,7 +1215,7 @@ impl InputConfig {
 
         println!("generating mobile worker configs");
         for mut worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
-            let generated_mobility_config = InputMobilityconfig {
+            let generated_mobility_config   = InputMobilityconfig {
                 mobility_base_path: Some(output_trajectory_directory.clone()),
                 //locationProviderConfig: output_trajectory_path,
                 locationProviderConfig: RelativePathBuf::from_path("invalid").unwrap(),
@@ -1189,7 +1233,7 @@ impl InputConfig {
                 numberOfTuplesToProducePerBuffer,
                 num_buffers,
                 &mut total_number_of_tuples_to_emit,
-                input_id + 1,
+                input_id,
             );
 
             //create config
@@ -1208,6 +1252,7 @@ impl InputConfig {
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
+                enableIncrementalPlacement: self.parameters.enable_query_reconfiguration
             };
             let yaml_path =
                 output_worker_config_directory.join(format!("mobile_worker{}.yaml", input_id));
@@ -1509,6 +1554,7 @@ struct MobileWorkerConfig {
     fieldNodeLocationCoordinates: String,
     logLevel: LogLevel,
     numWorkerThreads: u64,
+    enableIncrementalPlacement: bool
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1527,6 +1573,7 @@ struct FixedWorkerConfig {
     logLevel: LogLevel,
     numWorkerThreads: u64,
     //fieldNodeLocationCoordinates: (f64, f64),
+    enableIncrementalPlacement: bool
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -2137,7 +2184,7 @@ fn wait_for_topology(
                 if size == expected {
                     return Ok(size);
                 }
-                println!("number of nodes not reached");
+                println!("number of nodes not reached, expected {}", expected);
             }
         }
         std::thread::sleep(time::Duration::from_secs(1));

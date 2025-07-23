@@ -1,0 +1,1 @@
+cargo:rustc-env=MIME_TYPES_GENERATED_PATH=/data/ankit/experiments_jan25/nes_simulation/target/release/build/mime_guess-9685e402ada79b34/out/mime_types_generated.rs

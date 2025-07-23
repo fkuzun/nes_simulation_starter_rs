@@ -272,30 +272,33 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                         // let (k, c) = source_count_map.iter().next().unwrap().clone();
                         for (k, c) in source_count_map.iter() {
-                            assert_eq!(*c % 2, 0);
-                            let mut joins = String::from("{");
-                            for i in 0..*c / 2 {
-                                //replace input 1 and 2 in query string and add to join string
-                                let join_string = query_string
-                                    .replace("{INPUT1}", format!("{}s{}", k, i * 2 + 1).as_str())
-                                    .replace("{INPUT2}", format!("{}s{}", k, i * 2 + 2).as_str());
-                                joins.push_str(&join_string);
-                                
-                                if i < *c / 2 - 1 {
-                                    joins.push_str(", ");
-                                }
-                            }
-                            joins.push('}');
-
-                            let outer_query = "Query::sink2({SINK}, {JOINS});";
-                            //replace joins
-                            let outer_query = outer_query.replace("{JOINS}", &joins);
+                        assert_eq!(*c % 2, 0);
+                        let mut joins = String::from("{");
+                        for i in 0..*c / 2 {
+                            //replace input 1 and 2 in query string and add to join string
+                            let join_string = query_string
+                                .replace("{INPUT1}", format!("{}s{}", k, i * 2 + 1).as_str())
+                                .replace("{INPUT2}", format!("{}s{}", k, i * 2 + 2).as_str());
+                            joins.push_str(&join_string);
                             
-                            let window_size = experiment.input_config.parameters.window_size;
-                            let input_replaced = outer_query.replace("{WINDOW_SIZE}", &window_size.to_string());
-                            let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
-                            let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
-                            query_strings.push(tcp_sink);
+                            if i < *c / 2 - 1 {
+                                joins.push_str(", ");
+                            }
+                        }
+                        joins.push('}');
+
+                        let outer_query = "Query::sink2({SINK}, {JOINS});";
+                        //replace joins
+                        let outer_query = outer_query.replace("{JOINS}", &joins);
+                        
+                        let window_size = experiment.input_config.parameters.window_size;
+                        let input_replaced = outer_query.replace("{WINDOW_SIZE}", &window_size.to_string());
+                        let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
+                        let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
+                        println!("--------------");
+                        println!("Query: {}", tcp_sink);
+                        println!("--------------");
+                        query_strings.push(tcp_sink);
                         }
                     } else {
                         for id in place_default_sources_on_node_ids
