@@ -277,10 +277,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                             for i in 0..*c / 2 {
                                 //replace input 1 and 2 in query string and add to join string
                                 let join_string = query_string
-                                    .replace("{INPUT1}", format!("{}s{}", k, i * 2 + 1).as_str())
-                                    .replace("{INPUT2}", format!("{}s{}", k, i * 2 + 2).as_str());
+                                .replace("{INPUT1}", format!("{}s{}", k, i * 2 + 1).as_str())
+                                .replace("{INPUT2}", format!("{}s{}", k, i * 2 + 2).as_str());
                                 joins.push_str(&join_string);
-                                
                                 if i < *c / 2 - 1 {
                                     joins.push_str(", ");
                                 }
@@ -295,6 +294,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                             let input_replaced = outer_query.replace("{WINDOW_SIZE}", &window_size.to_string());
                             let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
                             let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
+                            println!("--------------");
+                            println!("Query: {}", tcp_sink);
+                            println!("--------------");
                             query_strings.push(tcp_sink);
                         }
                     } else {
@@ -330,6 +332,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let deployed = task::spawn_blocking(move || {
                             ExperimentSetup::submit_queries(listener_port, query_strings).is_ok()
                         });
+                        // println!("Wait queries to be deployed");
+                        // tokio::time::sleep(Duration::from_secs(20)).await;
+                        // println!("Queries are deployed");
                         //if let Ok(true) = deployed {
                         let mut num_spawned = 0;
                         {

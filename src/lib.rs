@@ -128,6 +128,8 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
             .delete("http://127.0.0.1:8081/v1/nes/topology/removeAsChild")
             .json(&link_request)
             .send()?;
+        println!("sleeping");
+        sleep(Duration::from_millis(200));
         //assert!(result.json().unwrap());
         let reply: AddEdgeReply = result.json()?;
         if !reply.success {
@@ -787,7 +789,7 @@ impl ExperimentSetup {
         )?;
 
         println!("waiting for mobile workers to be online");
-        sleep(Duration::from_secs(7));
+        sleep(Duration::from_secs(60));
         wait_for_topology(
             Some(self.fixed_worker_processes.len() + self.mobile_worker_processes.len() + 1),
             Arc::clone(&shutdown_triggered),
@@ -876,7 +878,9 @@ impl ExperimentSetup {
         shutdown_triggered: Arc<AtomicBool>,
         log_level: &LogLevel,
     ) -> Result<(), Box<dyn Error>> {
+        self.fixed_config_paths.sort();
         for path in &self.fixed_config_paths {
+            println!("{:?}", path);
             sleep(Duration::from_millis(200));
             if shutdown_triggered.load(Ordering::SeqCst) {
                 return Err(String::from("Shutdown triggered").into());
@@ -901,7 +905,9 @@ impl ExperimentSetup {
         shutdown_triggered: Arc<AtomicBool>,
         log_level: &LogLevel,
     ) -> Result<(), Box<dyn Error>> {
+        self.mobile_config_paths.sort();
         for path in &self.mobile_config_paths {
+            println!("{:?}", path);
             sleep(Duration::from_millis(200));
             if shutdown_triggered.load(Ordering::SeqCst) {
                 return Err(String::from("Shutdown triggered").into());
@@ -1029,11 +1035,13 @@ impl InputConfig {
             let mut source_count_map = HashMap::<String, u64>::new();
 
             for v in place_default_sources_on_node_ids.into_values().flatten() {
+                println!("Processing node: {}", v);  // Track exactly what's counted
                 let source_count = source_count_map.entry(v.clone()).or_insert(0);
                 *source_count += 1;
-
+                println!("Current count for {}: {}", v, source_count);
                 names.push(format!("{}s{}", v, source_count));
             }
+            println!("map: {:#?}", source_count_map); 
             names
         };
         for n in &names {
@@ -1071,6 +1079,38 @@ impl InputConfig {
                 ],
             });
         }
+
+              
+        println!("register fake_migration_source");
+        logicalSources.push(LogicalSource {
+            logicalSourceName: "fake_migration_source".to_owned(),
+            fields: vec![
+                LogicalSourceField {
+                    name: "id".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "join_id".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "value".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "event_timestamp".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "processing_timestamp".to_string(),
+                    Type: UINT64,
+                },
+                LogicalSourceField {
+                    name: "output_timestamp".to_string(),
+                    Type: UINT64,
+                },
+            ],
+        });
 
         println!("generating coordinator config");
         //generate coordinator config
@@ -1126,7 +1166,7 @@ impl InputConfig {
                 numberOfSlots: number_of_slots.unwrap_or(*topology.slots.get(input_id).unwrap()),
                 nodeSpatialType: "FIXED_LOCATION".to_string(),
                 fieldNodeLocationCoordinates: format!("{}, {}", location[0], location[1]),
-                workerId: *input_id,
+                workerId: *input_id + 1,
                 physicalSources: physical_sources,
                 logLevel: LogLevel::LOG_ERROR,
                 numWorkerThreads: self.parameters.num_worker_threads,
@@ -1199,7 +1239,7 @@ impl InputConfig {
                 // dataPort: next_free_port + 1,
                 rpcPort: None,
                 dataPort: None,
-                workerId: input_id,
+                workerId: input_id + 1,
                 //numberOfSlots: 1,
                 //numberOfSlots: number_of_slots.unwrap(),
                 numberOfSlots: number_of_slots.unwrap_or(0),
@@ -2137,7 +2177,7 @@ fn wait_for_topology(
                 if size == expected {
                     return Ok(size);
                 }
-                println!("number of nodes not reached");
+                println!("number of nodes not reached, expected {}", expected);
             }
         }
         std::thread::sleep(time::Duration::from_secs(1));
