@@ -1,7 +1,7 @@
 use avro_rs::{Schema, Writer};
 use chrono::{DateTime, Local};
 use execute::{shell, Execute};
-use itertools::Itertools;
+use itertools::{assert_equal, Itertools};
 use reqwest::Url;
 use simulation_runner_lib::analyze::create_notebook;
 use simulation_runner_lib::*;
@@ -219,7 +219,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     reconnect_start
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap(),
-                    Duration::from_millis(10),
+                    experiment.input_config.parameters.speedup_factor,
                     Url::parse(&format!(
                         "http://127.0.0.1:{}/v1/nes/topology/update",
                         &rest_port.to_string()
@@ -227,6 +227,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .unwrap(),
                     // experiment.initial_topology_update.as_ref().unwrap().clone());
                     experiment.simulated_reconnects.initial_parents.clone(),
+                    experiment.input_config.parameters.reconnect_runtime
                 );
                 //todo: check if we need to join this thread
                 print_topology(rest_port).unwrap();
