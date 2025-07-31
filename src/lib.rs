@@ -683,45 +683,29 @@ impl ExperimentSetup {
         Ok(())
     }
 
-    pub fn submit_queries(
-        output_port: u16,
-        query_strings: Vec<String>,
-    ) -> Result<(), Box<dyn Error>> {
-        for query_string in query_strings {
-            Self::submit_query(output_port, query_string)?;
-            sleep(Duration::from_secs(10));
-        }
-
-        // //create vector of ExecuteQueryRequests
-        // let mut execute_query_requests = vec![];
-        //
-        // //iterate over query strings
+    pub fn submit_queries(output_port: u16, query_strings: Vec<String>) -> Result<(), Box<dyn Error>> {
         // for query_string in query_strings {
-        //     let execute_query_request = ExecuteQueryRequest {
-        //         user_query: query_string.replace("{OUTPUT}", &output_port.to_string()),
-        //         placement: PlacementStrategyType::BottomUp,
-        //     };
-        //     execute_query_requests.push(execute_query_request);
+        //     Self::submit_query(output_port, query_string)?;
         // }
-        // let client = reqwest::blocking::Client::new();
-        // let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-multiple-queries")
-        //     .json(&execute_query_requests).send()?;
-        // let reply: SubmitQueryResponse = result.json()?;
-        // if reply.queryId == 0 {
-        //     return Err("Could not submit query, received invalid query id 0".into());
-        // };
-        Ok(())
-    }
 
-    pub async fn submit_queries_async(
-        output_port: u16,
-        query_strings: Vec<String>,
-    ) -> Result<(), Box<dyn Error>> {
+        //create vector of ExecuteQueryRequests
+        let mut execute_query_requests = vec![];
+
+        //iterate over query strings
         for query_string in query_strings {
-            Self::submit_query(output_port, query_string)?;
-            println!("submit query successful");
-            tokio::time::sleep(Duration::from_secs(100)).await;
+            let execute_query_request = ExecuteQueryRequest {
+                user_query: query_string.replace("{OUTPUT}", &output_port.to_string()),
+                placement: PlacementStrategyType::BottomUp,
+            };
+            execute_query_requests.push(execute_query_request);
         }
+        let client = reqwest::blocking::Client::new();
+        let result = client.post("http://127.0.0.1:8081/v1/nes/query/execute-multiple-queries")
+            .json(&execute_query_requests).send()?;
+        let reply: SubmitQueryResponse = result.json()?;
+        if reply.queryId == 0 {
+            return Err("Could not submit query, received invalid query id 0".into());
+        };
         Ok(())
     }
 
