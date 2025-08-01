@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "simulation_runner_lib"
-path = "src/lib.rs"
+path = "src/lib_stateless.rs"
 
 [[bin]]
 name = "start_experiment"
