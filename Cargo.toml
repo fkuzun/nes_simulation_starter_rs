@@ -9,7 +9,7 @@ path = "src/lib_stateless.rs"
 
 [[bin]]
 name = "start_experiment"
-path = "src/main.rs"
+path = "src/stateless_simulation.rs"
 
 [[bin]]
 name = "tcp_input_server_stateless"
