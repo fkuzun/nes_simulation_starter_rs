@@ -12,8 +12,8 @@ name = "start_experiment"
 path = "src/main.rs"
 
 [[bin]]
-name = "tcp_input_server"
-path = "src/tcp_input_server.rs"
+name = "tcp_input_server_stateless"
+path = "src/tcp_input_server_stateless.rs"
 
 [[bin]]
 name = "precalculate_reconnects"
