@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use itertools::Itertools;
 use reqwest::Url;
-use crate::{lib_stateless, rest_node_relocation};
+use crate::{lib_stateless, rest_node_relocation, LogLevel};
 use crate::analyze::create_notebook;
 use lib_stateless::*;
 use std::collections::HashMap;
@@ -37,10 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Log level: {}", &args[6]);
         serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[6])).unwrap_or_else(|e| {
             eprintln!("Could not parse log level: {}", e);
-            lib_stateless::LogLevel::LOG_ERROR
+            LogLevel::LOG_ERROR
         })
     } else {
-        lib_stateless::LogLevel::LOG_ERROR
+        LogLevel::LOG_ERROR
     };
     let run_for_retrial_path = if args.len() == 8 {
         Some(PathBuf::from(&args[7]))

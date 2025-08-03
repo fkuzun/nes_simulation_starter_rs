@@ -10,13 +10,23 @@ use std::io::Write;
 use std::ops::Add;
 use std::path::PathBuf;
 use std::env;
+use serde::{Deserialize, Serialize};
 use crate::stateless_simulation::run_stateless_simulation;
-use crate::lib_stateless::LogLevel;
 pub mod stateful_simulation;
 pub mod lib_stateful;
 pub mod analyze;
 pub mod rest_node_relocation;
 pub mod MobileDeviceQuadrants;
+
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum LogLevel {
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_WARN,
+    LOG_ERROR,
+    LOG_NONE,
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();

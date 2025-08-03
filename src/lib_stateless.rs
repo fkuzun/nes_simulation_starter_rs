@@ -39,6 +39,7 @@ use regex::Regex;
 use relative_path::RelativePathBuf;
 use itertools::Itertools;
 use crate::rest_node_relocation::TopologyUpdate;
+use crate::LogLevel;
 
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
@@ -1355,14 +1356,6 @@ struct OptimizerConfiguration {
     placementAmendmentThreadCount: u16,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum LogLevel {
-    LOG_DEBUG,
-    LOG_INFO,
-    LOG_WARN,
-    LOG_ERROR,
-    LOG_NONE,
-}
 
 impl CoordinatorConfiguration {
     fn write_to_file(&self, path: &Path) -> Result<(), Box<dyn Error>> {
