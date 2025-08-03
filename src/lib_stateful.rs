@@ -599,7 +599,7 @@ use crate::lib_stateful::config::Paths;
 use crate::lib_stateful::FieldType::UINT64;
 use crate::lib_stateful::ReconnectPredictorType::PRECALCULATED;
 use crate::lib_stateful::WorkerConfigType::Fixed;
-use crate::rest_node_relocation;
+use crate::{rest_node_relocation, LogLevel};
 
 pub fn deserialize_relative_path<'de, D>(deserializer: D) -> Result<RelativePathBuf, D::Error>
 where
@@ -1691,15 +1691,6 @@ struct OptimizerConfiguration {
     placementAmendmentThreadCount: u16,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum LogLevel {
-    LOG_DEBUG,
-    LOG_INFO,
-    LOG_WARN,
-    LOG_ERROR,
-    LOG_NONE,
-}
-
 impl CoordinatorConfiguration {
     fn write_to_file(&self, path: &Path) -> Result<(), Box<dyn Error>> {
         let yaml_string = serde_yaml::to_string(&self)?;
@@ -2305,6 +2296,7 @@ pub fn get_expected_join_output_count(
 
 #[cfg(test)]
 mod tests {
+    use crate::LogLevel;
     use super::*;
 
     #[test]

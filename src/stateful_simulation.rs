@@ -23,7 +23,7 @@ use std::time::{Duration, SystemTime};
 use std::{env, fs};
 use tokio::task;
 use tokio::time::timeout;
-use crate::rest_node_relocation;
+use crate::{rest_node_relocation, LogLevel};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
