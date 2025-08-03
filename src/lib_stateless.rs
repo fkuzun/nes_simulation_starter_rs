@@ -134,6 +134,7 @@ pub fn add_edges_from_list(rest_port: &u16, edges: &Vec<(u64, u64)>) -> Result<(
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MultiSimulationInputConfig {
     pub enable_query_reconfiguration: Vec<bool>,
+    #[serde(default)]
     pub enable_proactive_deployment: Vec<bool>,
     pub tuples_per_buffer: Vec<usize>,
     pub speedup_factor: Vec<f64>,
@@ -461,6 +462,7 @@ impl NesExecutablePaths {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Parameters {
     pub enable_query_reconfiguration: bool,
+    #[serde(default)]
     pub enable_proactive_deployment: bool,
     pub speedup_factor: f64,
     //pub amount_of_reconnects: Option<u64>,
@@ -477,15 +479,10 @@ pub struct Parameters {
     pub reconnect_input_type: ReconnectPredictorType,
     pub source_input_server_port: u16,
     pub query_string: String,
-    #[serde_as(as = "DurationSeconds<u64>")]
-    pub reconnect_start_offset: Duration,
-    //#[serde_as(as = "HashMap<String, String>")]
-
-    // pub place_default_sources_on_node_ids: HashMap<String, Vec<String>>,
     pub place_default_sources_on_node_ids_path: PathBuf,
-    // pub logical_source_names: Vec<String>,
     pub num_worker_threads: u64,
     placementAmendmentThreadCount: u16,
+    #[serde(default)]
     pub query_duplication_factor: usize,
 }
 
