@@ -8,6 +8,10 @@ name = "start_experiment"
 path = "src/main.rs"
 
 [[bin]]
+name = "tcp_input_server_stateful"
+path = "src/tcp_input_server_stateful.rs"
+
+[[bin]]
 name = "tcp_input_server_stateless"
 path = "src/tcp_input_server_stateless.rs"
 
@@ -55,4 +59,5 @@ execute = "0.2.13"
 itertools = "0.13.0"
 plotly = "0.9.0"
 avro-rs = "0.13.0"
+byteorder = "1.5.0"
 #plotters = "0.3.6"

@@ -11,8 +11,7 @@ use serde_with::serde_as;
 use serde_with::DurationMilliSeconds;
 
 
-use crate::add_edges_from_list;
-
+use crate::lib_stateful::add_edges_from_list;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum ISQPEventAction {

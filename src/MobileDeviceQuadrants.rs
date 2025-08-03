@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
-use crate::{MobilityInputConfigList, ReconnectPredictorType};
 use crate::rest_node_relocation::{ISQPEvent, TopologyUpdate};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,28 +21,6 @@ pub struct QuadrantConfig {
     pub devices_per_quadrant: usize,
     pub quadrant_start_id: u64,
     pub mobile_start_id: u64,
-}
-
-impl QuadrantConfig {
-    pub fn get_config_list(&self) -> MobilityInputConfigList {
-        let mut configs = vec![];
-        for _c in 0..(self.num_quadrants * self.devices_per_quadrant) {
-                configs.push(
-                    crate::InputMobilityconfig {
-                        mobility_base_path: None,
-                        locationProviderConfig: Default::default(),
-                        locationProviderType: "invalid".to_string(),
-                        reconnectPredictorType: ReconnectPredictorType::PRECALCULATED,
-                        precalcReconnectPath: Default::default(),
-                    }
-                );
-        }
-
-        MobilityInputConfigList {
-            worker_mobility_configs: configs,
-            central_topology_update_list_path: None,
-        }
-    }
 }
 
 impl From<QuadrantConfig> for MobileDeviceQuadrants {

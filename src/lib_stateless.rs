@@ -1,14 +1,14 @@
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::error::Error;
 
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader, Read, Write};
 
 use std::process::{Child, Command};
-use std::{fs, io, sync, time};
+use std::{fs, io, time};
 
 
-use std::fs::{File, read_to_string};
+use std::fs::{read_to_string, File};
 use std::net::TcpListener;
 use std::ops::{Add, Deref, Range};
 
@@ -22,7 +22,6 @@ use std::sync::atomic::Ordering::SeqCst;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use avro_rs::{Schema, Writer};
-use avro_rs::types::Record;
 use chrono::Local;
 use futures::AsyncWriteExt;
 use nes_tools::launch::Launch;
@@ -41,11 +40,6 @@ use relative_path::RelativePathBuf;
 use itertools::Itertools;
 use crate::rest_node_relocation::TopologyUpdate;
 
-
-pub mod analyze;
-
-pub mod rest_node_relocation;
-pub mod MobileDeviceQuadrants;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
@@ -512,9 +506,9 @@ pub enum SourceInputMethod {
 
 
 use serde::Deserializer;
-
-use crate::config::Paths;
-use crate::ReconnectPredictorType::PRECALCULATED;
+use crate::lib_stateless::config::Paths;
+use crate::lib_stateless::ReconnectPredictorType::PRECALCULATED;
+use crate::rest_node_relocation;
 
 pub fn deserialize_relative_path<'de, D>(deserializer: D) -> Result<RelativePathBuf, D::Error>
 where
@@ -530,7 +524,7 @@ pub mod config {
     use std::path::PathBuf;
     use relative_path::RelativePathBuf;
     use serde::{Deserialize, Serialize};
-    use crate::lib_stateless::MobileDeviceQuadrants::QuadrantConfig;
+    use crate::MobileDeviceQuadrants::QuadrantConfig;
 
     #[derive(Debug, Deserialize, Serialize, Clone)]
     pub struct Paths {

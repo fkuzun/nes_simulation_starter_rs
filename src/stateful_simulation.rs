@@ -3,8 +3,8 @@ use chrono::{DateTime, Local};
 use execute::{shell, Execute};
 use itertools::{assert_equal, Itertools};
 use reqwest::Url;
-use simulation_runner_lib_stateful::analyze::create_notebook;
-use simulation_runner_lib_stateful::*;
+use crate::analyze::create_notebook;
+use crate::lib_stateful::*;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::format;
@@ -23,6 +23,7 @@ use std::time::{Duration, SystemTime};
 use std::{env, fs};
 use tokio::task;
 use tokio::time::timeout;
+use crate::rest_node_relocation;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();

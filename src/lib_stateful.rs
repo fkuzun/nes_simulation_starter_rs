@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 
-use byteorder::{LittleEndian, ReadBytesExt};
+// use byteorder::{LittleEndian, ReadBytesExt};
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader, Cursor, Read, Write};
 
@@ -17,8 +17,6 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::rest_node_relocation::TopologyUpdate;
-use crate::FieldType::UINT64;
-use crate::WorkerConfigType::Fixed;
 use avro_rs::types::Record;
 use avro_rs::{Schema, Writer};
 use chrono::Local;
@@ -40,13 +38,10 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use byteorder::LittleEndian;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 use yaml_rust::{YamlEmitter, YamlLoader};
 
-pub mod analyze;
-
-mod MobileDeviceQuadrants;
-pub mod rest_node_relocation;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
@@ -600,8 +595,11 @@ pub enum SourceInputMethod {
 
 use serde::Deserializer;
 
-use crate::config::Paths;
-use crate::ReconnectPredictorType::PRECALCULATED;
+use crate::lib_stateful::config::Paths;
+use crate::lib_stateful::FieldType::UINT64;
+use crate::lib_stateful::ReconnectPredictorType::PRECALCULATED;
+use crate::lib_stateful::WorkerConfigType::Fixed;
+use crate::rest_node_relocation;
 
 pub fn deserialize_relative_path<'de, D>(deserializer: D) -> Result<RelativePathBuf, D::Error>
 where
