@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         std::process::exit(1);
     }
 
-    let experiment_type: ExperimentType = serde_json::from_str(&args[1])?;
+    let experiment_type: ExperimentType = serde_json::from_str(&format!("\"{}\"", &args[1]))?;
     let nes_root_dir = PathBuf::from(&args[2]);
     let input_config_path = PathBuf::from(&args[3]);
     let output_directory = PathBuf::from(&args[4]);
