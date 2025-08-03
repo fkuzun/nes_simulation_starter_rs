@@ -3,7 +3,7 @@ use chrono::{DateTime, Local};
 use execute::{shell, Execute};
 use itertools::{assert_equal, Itertools};
 use reqwest::Url;
-pub mod lib_stateless;
+use crate::lib_stateless;
 use lib_stateless::analyze::create_notebook;
 use lib_stateless::*;
 use std::collections::HashMap;
@@ -41,10 +41,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Log level: {}", &args[6]);
         serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[6])).unwrap_or_else(|e| {
             eprintln!("Could not parse log level: {}", e);
-            LogLevel::LOG_ERROR
+            lib_stateless::LogLevel::LOG_ERROR
         })
     } else {
-        LogLevel::LOG_ERROR
+        lib_stateless::LogLevel::LOG_ERROR
     };
     let run_for_retrial_path = if args.len() == 8 {
         Some(PathBuf::from(&args[7]))
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_stateless_simulation(nes_root_dir: PathBuf, input_config_path: PathBuf, output_directory: &PathBuf, input_server_path: &PathBuf, runs: u64, log_level: &LogLevel, run_for_retrial_path: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
+pub fn run_stateless_simulation(nes_root_dir: PathBuf, input_config_path: PathBuf, output_directory: &PathBuf, input_server_path: &PathBuf, runs: u64, log_level: &LogLevel, run_for_retrial_path: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
 
@@ -67,9 +67,9 @@ fn run_stateless_simulation(nes_root_dir: PathBuf, input_config_path: PathBuf, o
         input_config_path,
         output_directory: output_directory.clone(),
         run_for_retrial_path,
-        output_type: OutputType::AVRO,
+        output_type: lib_stateless::OutputType::AVRO,
     };
-    let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
+    let nes_executable_paths = lib_stateless::NesExecutablePaths::new(&simulation_config);
     let mut experiments = simulation_config
         .generate_experiment_configs(runs)
         .expect("Could not create experiment");
@@ -177,9 +177,9 @@ fn run_stateless_simulation(nes_root_dir: PathBuf, input_config_path: PathBuf, o
                     experiment.simulated_reconnects.initial_parents.clone(),
                     experiment.input_config.parameters.reconnect_runtime
                 );
-                print_topology(rest_port).unwrap();
+                lib_stateless::print_topology(rest_port).unwrap();
                 if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
-                    print_topology(rest_port).unwrap();
+                    lib_stateless::print_topology(rest_port).unwrap();
 
                     let desired_line_count = experiment.total_number_of_tuples_to_ingest;
                     // Bind the TCP listener to the specified address and port
@@ -196,7 +196,7 @@ fn run_stateless_simulation(nes_root_dir: PathBuf, input_config_path: PathBuf, o
                     let mut file = File::create(&file_path).unwrap();
 
 
-                    let mut file = Arc::new(Mutex::new(AvroOutputWriter::new(file)));
+                    let mut file = Arc::new(Mutex::new(lib_stateless::AvroOutputWriter::new(file)));
 
                     let mut completed_threads = AtomicUsize::new(0);
                     let mut completed_threads = Arc::new(completed_threads);
@@ -246,7 +246,7 @@ fn run_stateless_simulation(nes_root_dir: PathBuf, input_config_path: PathBuf, o
                         let listener_port = listener.local_addr().unwrap().port();
                         println!("Listening for output tuples on port {}", listener_port);
                         let deployed = task::spawn_blocking(move || {
-                            ExperimentSetup::submit_queries(listener_port, query_strings).is_ok()
+                            lib_stateless::ExperimentSetup::submit_queries(listener_port, query_strings).is_ok()
                         });
                         let mut num_spawned = 0;
                         {
@@ -268,7 +268,7 @@ fn run_stateless_simulation(nes_root_dir: PathBuf, input_config_path: PathBuf, o
                                         let completed_threads_clone = completed_threads.clone();
                                         num_spawned += 1;
                                         tokio::spawn(async move {
-                                            if let Err(e) = handle_connection(
+                                            if let Err(e) = lib_stateless::handle_connection(
                                                 stream,
                                                 line_count_clone,
                                                 desired_line_count_copy,
