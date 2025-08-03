@@ -3,10 +3,6 @@ name = "simulation_runner_rs"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-name = "simulation_runner_lib"
-path = "src/lib_stateless.rs"
-
 [[bin]]
 name = "start_experiment"
 path = "src/stateless_simulation.rs"
@@ -20,20 +16,8 @@ name = "precalculate_reconnects"
 path = "src/precalculate_reconnects.rs"
 
 [[bin]]
-name = "precalculate_reconnects_from_topology_json"
-path = "src/precalculate_reconnects_from_topology_json.rs"
-
-[[bin]]
-name = "create_mobile_configs_from_trajectories"
-path = "src/createMobileConfigsFromTrajectories.rs"
-
-[[bin]]
 name = "get_random_number_range"
 path = "src/get_random_number_range.rs"
-
-[[bin]]
-name = "timestamp_reconnect_list"
-path = "src/timestamp_reconnect_list.rs"
 
 [[bin]]
 name = "retry_experiments"

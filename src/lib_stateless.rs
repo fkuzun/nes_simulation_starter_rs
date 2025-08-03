@@ -30,8 +30,8 @@ use nes_tools::query::SubmitQueryResponse;
 use nes_tools::topology::{AddEdgeReply, AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType};
 use serde_with::serde_as;
 use yaml_rust::{YamlEmitter, YamlLoader};
-use crate::FieldType::UINT64;
-use crate::WorkerConfigType::Fixed;
+use FieldType::UINT64;
+use WorkerConfigType::Fixed;
 use serde_with::DurationMilliSeconds;
 use serde_with::DurationNanoSeconds;
 use serde_with::DurationSeconds;
@@ -45,7 +45,7 @@ use crate::rest_node_relocation::TopologyUpdate;
 pub mod analyze;
 
 pub mod rest_node_relocation;
-mod MobileDeviceQuadrants;
+pub mod MobileDeviceQuadrants;
 
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
@@ -530,7 +530,7 @@ pub mod config {
     use std::path::PathBuf;
     use relative_path::RelativePathBuf;
     use serde::{Deserialize, Serialize};
-    use crate::MobileDeviceQuadrants::QuadrantConfig;
+    use crate::lib_stateless::MobileDeviceQuadrants::QuadrantConfig;
 
     #[derive(Debug, Deserialize, Serialize, Clone)]
     pub struct Paths {
@@ -1490,11 +1490,11 @@ impl OutputWriter for AvroOutputWriter {
         println!("{:?}", schema);
 
         let mut writer = Writer::new(&schema, Vec::new());
-        
+
         for tuple in &self.buffer {
             writer.append_ser(tuple)?;
         }
-        
+
         // let mut writer = Writer::new(&schema, file);
         let encoded = writer.into_inner().unwrap();
         self.file.write_all(&encoded)?;
@@ -1576,7 +1576,7 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
     //         current_valid_byte_count = 0;
     //     }
     // }
-    // 
+    //
     // // sanity check
     // for &byte in &buf[total_valid_byte_count..] {
     //     if byte == 10u8 {
@@ -1630,13 +1630,13 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(stream: tokio::net::Tcp
                 lines += 1;
 
                 // let mut record = Record::new(writer.schema()).unwrap();
-                // 
+                //
                 // let id = u64::from_le_bytes([binary_tuple[0], binary_tuple[1], binary_tuple[2], binary_tuple[3], binary_tuple[4], binary_tuple[5], binary_tuple[6], binary_tuple[7]]);
                 // let sequence_number = u64::from_le_bytes([binary_tuple[8], binary_tuple[9], binary_tuple[10], binary_tuple[11], binary_tuple[12], binary_tuple[13], binary_tuple[14], binary_tuple[15]]);
                 // let event_timestamp = u64::from_le_bytes([binary_tuple[16], binary_tuple[17], binary_tuple[18], binary_tuple[19], binary_tuple[20], binary_tuple[21], binary_tuple[22], binary_tuple[23]]);
                 // let ingestion_timestamp = u64::from_le_bytes([binary_tuple[24], binary_tuple[25], binary_tuple[26], binary_tuple[27], binary_tuple[28], binary_tuple[29], binary_tuple[30], binary_tuple[31]]);
                 // let output_timestamp = u64::from_le_bytes([binary_tuple[32], binary_tuple[33], binary_tuple[34], binary_tuple[35], binary_tuple[36], binary_tuple[37], binary_tuple[38], binary_tuple[39]]);
-                // 
+                //
                 // record.put("id", i64::try_from(id)?);
                 // record.put("sequence_number", i64::try_from(sequence_number)?);
                 // record.put("event_time", i64::try_from(event_timestamp)?);
