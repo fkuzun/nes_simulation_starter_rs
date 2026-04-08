@@ -10,7 +10,7 @@ use serde_with::serde_as;
 use serde_with::DurationMilliSeconds;
 
 
-use crate::add_edges_from_list;
+use crate::util::add_edges_from_list;
 
 
 #[allow(non_camel_case_types)]

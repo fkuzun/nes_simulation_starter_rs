@@ -121,6 +121,8 @@ fn generate_data(id: u64, sequence_nr: &mut u64, num_tuples: usize, join_match_i
             .duration_since(UNIX_EPOCH).unwrap()
             .as_nanos() as u64; // Get current timestamp in milliseconds
 
+        // Every join_match_interval-th tuple gets join_id = seq_nr * 1000 (matchable across sources).
+        // Others get join_id = source_id (only self-matching, excluded from cross-source joins).
         let join_id = if *sequence_nr % join_match_interval == 0 {
             *sequence_nr * 1000
         } else {

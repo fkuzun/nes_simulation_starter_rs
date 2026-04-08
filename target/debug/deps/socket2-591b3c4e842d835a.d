@@ -1,0 +1,11 @@
+/Users/d.ferents/projects/starter/target/debug/deps/socket2-591b3c4e842d835a.d: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockaddr.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/socket.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockref.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sys/unix.rs
+
+/Users/d.ferents/projects/starter/target/debug/deps/libsocket2-591b3c4e842d835a.rlib: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockaddr.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/socket.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockref.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sys/unix.rs
+
+/Users/d.ferents/projects/starter/target/debug/deps/libsocket2-591b3c4e842d835a.rmeta: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockaddr.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/socket.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockref.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sys/unix.rs
+
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/lib.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockaddr.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/socket.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sockref.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.4.9/src/sys/unix.rs:

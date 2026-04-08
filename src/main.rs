@@ -1,9 +1,7 @@
 use chrono::{DateTime, Local};
-use itertools::Itertools;
 use reqwest::Url;
 use simulation_runner_lib::analyze::create_notebook;
 use simulation_runner_lib::*;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -15,7 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-use std::{env, fs};
+use std::env;
 use tokio::task;
 use tokio::time::timeout;
 
@@ -46,18 +44,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         None
     };
 
-    // let simulated_reconnects: SimulatedReconnects = serde_json::from_str(&std::fs::read_to_string(PathBuf::from(simulated_reconnect_paths)).unwrap()).unwrap();
-
-    // let nes_root_dir = PathBuf::from("/home/x/uni/ba/standalone/nebulastream/build");
     let relative_worker_path = PathBuf::from("nes-worker/nesWorker");
     let relative_coordinator_path = PathBuf::from("nes-coordinator/nesCoordinator");
-    // let input_config_path = PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml");
-    // let output_directory = PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/experiments");
-
-    //check if retrial is complete
-    //let run_for_retrial_path = Some(PathBuf::from("/media/x/28433579-5ade-44c1-a46c-c99efbf9b8c0/home/sqy/long_runs/merged/one_moving_multiple_fixed_source_no_reconnect_to_field_source_iterate_reconf_tuples_interval_speedup.toml2024-02-08_17-25-01"));
-
-    //let runs = 7;
 
     let simulation_config = SimulationConfig {
         nes_root_dir,
@@ -71,13 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let _coordinator_path = &nes_executable_paths.coordinator_path;
     let _worker_path = &nes_executable_paths.worker_path;
-    //let mut experiment = simulation_config.generate_experiment_configs().expect("Could not create experiment");
 
-    // let mut experiments = if simulation_config.run_for_retrial_path.is_some() {
-    //     simulation_config.generate_retrials().expect("Could not create experiment")
-    // } else {
-    //     simulation_config.generate_experiment_configs().expect("Could not create experiment")
-    // };
     let mut experiments = simulation_config
         .generate_experiment_configs(runs)
         .expect("Could not create experiment");
@@ -89,7 +71,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     })
     .expect("TODO: panic message");
 
-    //create runtime
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let total_number_of_runs = experiments.len();
@@ -100,7 +81,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             break;
         }
 
-        // let experiment_duration = experiment.input_config.parameters.runtime.add(Duration::from_secs(10));
         let experiment_duration = experiment.input_config.get_total_time();
 
         println!(
@@ -127,7 +107,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 println!("Experiment started at {}, begin ingesting tuples at {}, start reconnects at {}", start_date_time, ingestion_start_date_time, reconnect_start_date_time);
                 let now: DateTime<Local> = Local::now();
                 println!("{}: Starting attempt {}", now, attempt);
-                //start source input server
                 println!("starting input server");
                 let mut source_input_server_process = Command::new(&input_server_path)
                     .arg("127.0.0.1")
@@ -175,9 +154,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 );
 
                 let rest_port = 8081;
-                // create rest topology updater
                 let rest_topology_updater = rest_node_relocation::REST_topology_updater::new(
-                    // experiment.central_topology_updates.clone(),
                     experiment.simulated_reconnects.topology_updates.clone(),
                     reconnect_start
                         .duration_since(SystemTime::UNIX_EPOCH)
@@ -188,27 +165,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                         &rest_port.to_string()
                     ))
                     .unwrap(),
-                    // experiment.initial_topology_update.as_ref().unwrap().clone());
                     experiment.simulated_reconnects.initial_parents.clone(),
-                    experiment.input_config.parameters.reconnect_runtime
+                    experiment.input_config.parameters.reconnect_runtime,
                 );
-                //todo: check if we need to join this thread
                 print_topology(rest_port).unwrap();
                 if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
                     print_topology(rest_port).unwrap();
-                    //println!("press any key to proceed");
-                    //let input: String = text_io::read!("{}\n");
 
-                    //let num_sources = experiment.input_config.parameters.place_default_source_on_fixed_node_ids.len() + experiment.
                     let desired_line_count = experiment.total_number_of_tuples_to_emit;
 
-                    
-                    // Bind the TCP listener to the specified address and port
-
-                    let line_count = AtomicUsize::new(0); // Counter for the lines written
+                    let line_count = AtomicUsize::new(0);
                     let line_count = Arc::new(line_count);
-                    //let  line_count = 0; // Counter for the lines written
-                    // Open the CSV file for writing
 
                     let file_path = format!(
                         "{}_run:{}.csv",
@@ -217,125 +184,38 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                     let file = File::create(&file_path).unwrap();
 
-                    // let mut file: Arc<Mutex<dyn OutputWriter>> = match simulation_config.output_type {
-                    //     OutputType::CSV => Arc::new(Mutex::new(FileOutputWriter { file })),
-                    //     OutputType::AVRO => {
-                    //         Arc::new(Mutex::new(AvroOutputWriter::new(&schema, file)))
-                    //     }
-                    // };
-
-                    // let mut file=  Arc::new(Mutex::new(AvroOutputWriter { file, schema: &schema }));
-                    // let mut file=  Arc::new(Mutex::new(AvroOutputWriter::new(&schema, file)));
                     let file = Arc::new(Mutex::new(AvroOutputWriter::new(file)));
-
-                    // let mut file = Arc::new(Mutex::new(file));
 
                     let completed_threads = AtomicUsize::new(0);
                     let completed_threads = Arc::new(completed_threads);
                     let query_string = experiment.input_config.parameters.query_string.clone();
 
-                    let place_default_sources_on_node_ids = fs::read_to_string(
-                        &experiment
-                            .input_config
-                            .parameters
-                            .place_default_sources_on_node_ids_path,
-                    )
-                    .expect("Failed to read place_default_sources_on_node_ids");
-                    let place_default_sources_on_node_ids: HashMap<u64, Vec<u64>> =
-                        serde_json::from_str(&place_default_sources_on_node_ids)
-                            .expect("could not parse map of sourcees to nodes");
-                    let place_default_sources_on_node_ids: HashMap<String, Vec<String>> =
-                        place_default_sources_on_node_ids
-                            .iter()
-                            .map(|(k, v)| {
-                                (
-                                    k.to_string(),
-                                    v.clone().iter().map(|x| x.to_string()).collect(),
-                                )
-                            })
-                            .collect();
-                    let mut query_strings = vec![];
+                    let query_strings = build_query_strings(
+                        &experiment.input_config.parameters.place_default_sources_on_node_ids_path,
+                        &query_string,
+                        experiment.input_config.parameters.window_size,
+                        experiment.input_config.parameters.query_duplication_factor,
+                    );
 
-                    if JOIN_QUERY {
-                        let mut source_count_map = HashMap::<String, u64>::new();
-
-                        for v in place_default_sources_on_node_ids.values().flatten() {
-
-                            let source_count = source_count_map.entry(v.clone()).or_insert(0);
-                            *source_count += 1;
-                        };
-
-                        // let (k, c) = source_count_map.iter().next().unwrap().clone();
-                        for (k, c) in source_count_map.iter() {
-                            assert_eq!(*c % 2, 0);
-                            let mut joins = String::from("{");
-                            for i in 0..*c / 2 {
-                                //replace input 1 and 2 in query string and add to join string
-                                let join_string = query_string
-                                .replace("{INPUT1}", format!("{}s{}", k, i * 2 + 1).as_str())
-                                .replace("{INPUT2}", format!("{}s{}", k, i * 2 + 2).as_str());
-                                joins.push_str(&join_string);
-                                if i < *c / 2 - 1 {
-                                    joins.push_str(", ");
-                                }
-                            }
-                            joins.push('}');
-
-                            let outer_query = "Query::sink2({SINK}, {JOINS});";
-                            //replace joins
-                            let outer_query = outer_query.replace("{JOINS}", &joins);
-                            
-                            let window_size = experiment.input_config.parameters.window_size;
-                            let input_replaced = outer_query.replace("{WINDOW_SIZE}", &window_size.to_string());
-                            let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", k);
-                            let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
-                            println!("--------------");
-                            println!("Query: {}", tcp_sink);
-                            println!("--------------");
-                            query_strings.push(tcp_sink);
-                        }
-                    } else {
-                        for id in place_default_sources_on_node_ids
-                            .values()
-                            .flatten()
-                            .unique()
-                        {
-                            let input_replaced = query_string.replace("{INPUT}", &id.to_string());
-                            let sink_string = format!("FileSinkDescriptor::create(\"{}:{{OUTPUT}}\", \"CSV_FORMAT\", \"true\")", id);
-                            let tcp_sink = input_replaced.replace("{SINK}", &sink_string);
-                            let null_sink = input_replaced
-                                .replace("{SINK}", "NullOutputSinkDescriptor::create()");
-                            query_strings.push(tcp_sink);
-                            for _i in 0..experiment.input_config.parameters.query_duplication_factor
-                            {
-                                query_strings.push(null_sink.clone());
-                            }
-                        }
-                    }
                     dbg!(&query_strings);
-                    let desired_line_count_per_thread = experiment.total_number_of_tuples_to_emit / query_strings.len() as u64;
+                    let desired_line_count_per_thread =
+                        experiment.total_number_of_tuples_to_emit / query_strings.len() as u64;
                     std::thread::sleep(Duration::from_secs(10));
 
-                    // Use the runtime
                     rt.block_on(async {
-                        //todo: in the future we need to implement on the nes side parsing of ip and not only the port
-                        //let listener = tokio::net::TcpListener::bind("127.0.0.1:12345").await.unwrap();
-                        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                        let listener =
+                            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                         let listener_port = listener.local_addr().unwrap().port();
                         println!("Listening for output tuples on port {}", listener_port);
-                        //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
                         let _deployed = task::spawn_blocking(move || {
                             ExperimentSetup::submit_queries(listener_port, query_strings).is_ok()
                         });
-                        // println!("Wait queries to be deployed");
-                        // tokio::time::sleep(Duration::from_secs(20)).await;
-                        // println!("Queries are deployed");
-                        //if let Ok(true) = deployed {
                         let mut num_spawned = 0;
                         {
-                            while !shutdown_triggered.load(Ordering::SeqCst) && ((completed_threads.load(SeqCst) < num_spawned) || num_spawned == 0) {
-                                //let timeout_duration = experiment_duration * 2;
-                                // let timeout_duration = experiment_duration + experiment.input_config.parameters.cooldown_time + Duration::from_secs(40);
+                            while !shutdown_triggered.load(Ordering::SeqCst)
+                                && ((completed_threads.load(SeqCst) < num_spawned)
+                                    || num_spawned == 0)
+                            {
                                 let reconnect_timout = Duration::from_secs(20);
                                 let timeout_duration = experiment_duration;
                                 let accept_result =
@@ -343,8 +223,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                                 match accept_result {
                                     Ok(Ok((stream, _))) => {
-                                        // Handle the connection
-                                        //tokio::spawn(handle_connection(stream, &mut line_count, desired_line_count, &mut file));
                                         let file_clone = file.clone();
                                         let line_count_clone = line_count.clone();
                                         let shutdown_triggered_clone =
@@ -368,9 +246,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             )
                                             .await
                                             {
-                                                eprintln!("Error handling connection: {}", e);
+                                                eprintln!(
+                                                    "Error handling connection: {}",
+                                                    e
+                                                );
                                             }
-                                            completed_threads_clone.fetch_add(1, Ordering::SeqCst);
+                                            completed_threads_clone
+                                                .fetch_add(1, Ordering::SeqCst);
                                         });
                                     }
                                     Ok(Err(e)) => {
@@ -380,22 +262,29 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         println!("Could not establish connection during this loop iteration ({}) proceeding with check if we can finish the experiment now", e);
                                     }
                                 }
-                                println!("Completed threads: {}, Spawned threads {}", completed_threads.load(SeqCst) ,num_spawned);
+                                println!(
+                                    "Completed threads: {}, Spawned threads {}",
+                                    completed_threads.load(SeqCst),
+                                    num_spawned
+                                );
                             }
                             loop {
                                 let current_time = SystemTime::now();
                                 if let Ok(elapsed_time) =
                                     current_time.duration_since(experiment_start)
                                 {
-                                    //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
                                     if completed_threads.load(SeqCst) == num_spawned
                                         && num_spawned > 0
                                         || elapsed_time > experiment_duration * 10
-                                        || line_count.load(SeqCst) >= desired_line_count as usize
+                                        || line_count.load(SeqCst)
+                                            >= desired_line_count as usize
                                         || shutdown_triggered.load(Ordering::SeqCst)
                                     {
                                         println!("flushing file");
-                                        file.lock().unwrap().flush().expect("TODO: panic message");
+                                        file.lock()
+                                            .unwrap()
+                                            .flush()
+                                            .expect("TODO: panic message");
                                         break;
                                     }
                                     println!(
@@ -409,18 +298,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     tokio::time::sleep(Duration::from_secs(5)).await;
                                 }
                             }
-                            //check timeout
                         }
                     });
                     if line_count.load(SeqCst) < desired_line_count as usize {
-                        // Handle timeout here
                         let mut error_file = OpenOptions::new()
                             .append(true)
                             .create(true)
-                            //.open(&experiment.generated_folder.join("error.txt"))
                             .open(&output_directory.join("error.csv"))
                             .unwrap();
-                        //let error_string = format!("Aborted experiment in attempt {}", attempt);
                         let error_string = format!(
                             "{},{},{},{}\n",
                             experiment
@@ -436,7 +321,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                             .write_all(error_string.as_bytes())
                             .expect("Error while writing error message to file");
                     }
-                    //get_reconnect_list(8081).unwrap();
                     experiment.kill_processes()?;
                     source_input_server_process.kill()?;
                     let current_time = SystemTime::now();
@@ -473,9 +357,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 .as_bytes(),
                         )
                         .expect("Error while writing reconnect list to file");
-                    //create_notebook(&experiment.experiment_output_path, &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb"), &experiment.generated_folder.join("analysis.ipynb"))?;
-                    //let notebook_path = &PathBuf::from("/home/x/uni/ba/experiments/nes_experiment_input/Analyze-new.ipynb");
-                    //if notebook_path.exists() {
                     if let Some(notebook_path) = &simulation_config.get_analysis_script_path() {
                         create_notebook(
                             &PathBuf::from(&file_path),
@@ -490,22 +371,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if shutdown_triggered.load(Ordering::SeqCst) {
                         break;
                     }
-                    // Check if the maximum number of lines has been written
-                    // if line_count.load(SeqCst) >= desired_line_count as usize {
-                    //     file.flush().expect("TODO: panic message");
-                    //     break;
-                    // }
                 } else {
-                    //todo: move inside the experiment impl
                     println!("Failed to add all mobile edges");
                 }
                 source_input_server_process.kill()?;
             } else {
-                //todo: move inside the experiment impl
                 println!("Experiment failed to start");
             }
 
-            //get_reconnect_list(8081).unwrap();
             experiment.kill_processes()?;
             let wait_time = 30;
             println!(

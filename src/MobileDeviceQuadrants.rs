@@ -142,45 +142,6 @@ impl MobileDeviceQuadrants {
         changes
     }
 
-    // pub fn get_update_vector(mut self, runtime: Duration, interval: Duration, start_offset: Duration) -> Vec<TopologyUpdate> {
-    //     let mut updates = vec![];
-    // 
-    //     let mut timestamp = Duration::new(0, 0);
-    //     let mut initial_events = vec![];
-    //     //insert initial reconnects
-    //     for (quadrant_id, devices) in self.quadrant_map.iter() {
-    //         for device in devices {
-    //             initial_events.push(
-    //                 ISQPEvent {
-    //                     parent_id: 1,
-    //                     child_id: device.device_id,
-    //                     action: crate::rest_node_relocation::ISQPEventAction::remove,
-    //                 });
-    //             initial_events.push(
-    //                 ISQPEvent {
-    //                     parent_id: *quadrant_id,
-    //                     child_id: device.device_id,
-    //                     action: crate::rest_node_relocation::ISQPEventAction::add,
-    //                 }
-    //             );
-    //         }
-    //     }
-    //     updates.push(TopologyUpdate {
-    //         timestamp,
-    //         events: initial_events,
-    //     });
-    //     timestamp += start_offset;
-    // 
-    //     //insert reconnects
-    //     while timestamp < runtime {
-    //         updates.push(TopologyUpdate {
-    //             timestamp,
-    //             events: self.rotate_devices(),
-    //         });
-    //         timestamp += interval;
-    //     }
-    //     updates
-    // }
 }
 
 #[cfg(test)]
