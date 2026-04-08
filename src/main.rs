@@ -1,20 +1,15 @@
-use avro_rs::{Schema, Writer};
 use chrono::{DateTime, Local};
-use execute::{shell, Execute};
-use itertools::{assert_equal, Itertools};
+use itertools::Itertools;
 use reqwest::Url;
 use simulation_runner_lib::analyze::create_notebook;
 use simulation_runner_lib::*;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt::format;
 use std::fs::{File, OpenOptions};
-use std::future::Future;
 use std::io::Write;
-use std::net::TcpListener;
 use std::ops::Add;
 use std::path::PathBuf;
-use std::process::{Command, Output, Stdio};
+use std::process::Command;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -74,8 +69,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         output_type: OutputType::AVRO,
     };
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
-    let coordinator_path = &nes_executable_paths.coordinator_path;
-    let worker_path = &nes_executable_paths.worker_path;
+    let _coordinator_path = &nes_executable_paths.coordinator_path;
+    let _worker_path = &nes_executable_paths.worker_path;
     //let mut experiment = simulation_config.generate_experiment_configs().expect("Could not create experiment");
 
     // let mut experiments = if simulation_config.run_for_retrial_path.is_some() {
@@ -95,12 +90,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     .expect("TODO: panic message");
 
     //create runtime
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
 
     let total_number_of_runs = experiments.len();
-    'all_experiments: for (index, (experiment, runs)) in experiments.iter_mut().enumerate() {
+    for (index, (experiment, runs)) in experiments.iter_mut().enumerate() {
         let run_number = index + 1;
-        if (shutdown_triggered.load(Ordering::SeqCst)) {
+        if shutdown_triggered.load(Ordering::SeqCst) {
             experiment.kill_processes()?;
             break;
         }
@@ -210,7 +205,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     
                     // Bind the TCP listener to the specified address and port
 
-                    let mut line_count = AtomicUsize::new(0); // Counter for the lines written
+                    let line_count = AtomicUsize::new(0); // Counter for the lines written
                     let line_count = Arc::new(line_count);
                     //let  line_count = 0; // Counter for the lines written
                     // Open the CSV file for writing
@@ -220,7 +215,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         &experiment.experiment_output_path.to_str().unwrap(),
                         attempt
                     );
-                    let mut file = File::create(&file_path).unwrap();
+                    let file = File::create(&file_path).unwrap();
 
                     // let mut file: Arc<Mutex<dyn OutputWriter>> = match simulation_config.output_type {
                     //     OutputType::CSV => Arc::new(Mutex::new(FileOutputWriter { file })),
@@ -231,12 +226,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     // let mut file=  Arc::new(Mutex::new(AvroOutputWriter { file, schema: &schema }));
                     // let mut file=  Arc::new(Mutex::new(AvroOutputWriter::new(&schema, file)));
-                    let mut file = Arc::new(Mutex::new(AvroOutputWriter::new(file)));
+                    let file = Arc::new(Mutex::new(AvroOutputWriter::new(file)));
 
                     // let mut file = Arc::new(Mutex::new(file));
 
-                    let mut completed_threads = AtomicUsize::new(0);
-                    let mut completed_threads = Arc::new(completed_threads);
+                    let completed_threads = AtomicUsize::new(0);
+                    let completed_threads = Arc::new(completed_threads);
                     let query_string = experiment.input_config.parameters.query_string.clone();
 
                     let place_default_sources_on_node_ids = fs::read_to_string(
@@ -329,7 +324,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let listener_port = listener.local_addr().unwrap().port();
                         println!("Listening for output tuples on port {}", listener_port);
                         //let deployed = task::spawn_blocking(move || {ExperimentSetup::submit_queries(listener_port, query_string).is_ok()}).await;
-                        let deployed = task::spawn_blocking(move || {
+                        let _deployed = task::spawn_blocking(move || {
                             ExperimentSetup::submit_queries(listener_port, query_strings).is_ok()
                         });
                         // println!("Wait queries to be deployed");
@@ -350,12 +345,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     Ok(Ok((stream, _))) => {
                                         // Handle the connection
                                         //tokio::spawn(handle_connection(stream, &mut line_count, desired_line_count, &mut file));
-                                        let mut file_clone = file.clone();
-                                        let mut line_count_clone = line_count.clone();
-                                        let mut shutdown_triggered_clone =
+                                        let file_clone = file.clone();
+                                        let line_count_clone = line_count.clone();
+                                        let shutdown_triggered_clone =
                                             shutdown_triggered.clone();
-                                        let mut experiment_start_clone = experiment_start.clone();
-                                        let mut timeout_duration_clone = timeout_duration.clone();
+                                        let experiment_start_clone = experiment_start.clone();
+                                        let _timeout_duration_clone = timeout_duration.clone();
                                         let desired_line_count_copy = desired_line_count;
                                         let completed_threads_clone = completed_threads.clone();
                                         num_spawned += 1;
@@ -393,8 +388,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     current_time.duration_since(experiment_start)
                                 {
                                     //if elapsed_time > timeout_duration + experiment.input_config.parameters.cooldown_time * 2 {
-                                    if (completed_threads.load(SeqCst) == num_spawned
-                                        && num_spawned > 0)
+                                    if completed_threads.load(SeqCst) == num_spawned
+                                        && num_spawned > 0
                                         || elapsed_time > experiment_duration * 10
                                         || line_count.load(SeqCst) >= desired_line_count as usize
                                         || shutdown_triggered.load(Ordering::SeqCst)
@@ -452,7 +447,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         attempt,
                         current_time.duration_since(experiment_start)
                     );
-                    let mut tuple_count_string = format!(
+                    let tuple_count_string = format!(
                         "{},{},{}\n",
                         attempt,
                         line_count.load(SeqCst),
@@ -464,7 +459,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     tuple_count_file
                         .write_all(tuple_count_string.as_bytes())
                         .expect("Error while writing tuple count to file");
-                    let mut actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
+                    let actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
                     let reconnect_list_path = file_path.clone().add("reconnects.csv");
                     let mut reconnect_list_file =
                         File::create(PathBuf::from(reconnect_list_path)).unwrap();
@@ -492,7 +487,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     } else {
                         println!("No analysis script defined")
                     }
-                    if (shutdown_triggered.load(Ordering::SeqCst)) {
+                    if shutdown_triggered.load(Ordering::SeqCst) {
                         break;
                     }
                     // Check if the maximum number of lines has been written
@@ -521,7 +516,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         experiment.kill_processes()?;
-        if (shutdown_triggered.load(Ordering::SeqCst)) {
+        if shutdown_triggered.load(Ordering::SeqCst) {
             break;
         }
         let wait_time = 30;

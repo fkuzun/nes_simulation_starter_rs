@@ -7,6 +7,7 @@ use std::collections::HashMap;
 #[derive(Deserialize, Debug)]
 struct Config {
     package: Package,
+    #[allow(dead_code)]
     dependencies: HashMap<String, Vec<String>>,
 }
 
@@ -18,7 +19,7 @@ struct Package {
 }
 
 fn main() -> Result<(), Error> {
-    let toml_content = r#"
+    let _toml_content = r#"
           [package]
           name = "your_package"
           version = "0.1.0"
@@ -27,7 +28,7 @@ fn main() -> Result<(), Error> {
           [dependencies]
           serde = "1.0"
           "#;
-    
+
     let toml_content = r#"
           [package]
           name = "your_package"

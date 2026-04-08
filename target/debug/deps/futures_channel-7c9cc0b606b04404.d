@@ -1,0 +1,9 @@
+/Users/d.ferents/projects/starter/target/debug/deps/futures_channel-7c9cc0b606b04404.d: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/lock.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/mpsc/mod.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/mpsc/queue.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/oneshot.rs
+
+/Users/d.ferents/projects/starter/target/debug/deps/libfutures_channel-7c9cc0b606b04404.rmeta: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/lock.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/mpsc/mod.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/mpsc/queue.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/oneshot.rs
+
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/lib.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/lock.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/mpsc/mod.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/mpsc/queue.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.28/src/oneshot.rs:

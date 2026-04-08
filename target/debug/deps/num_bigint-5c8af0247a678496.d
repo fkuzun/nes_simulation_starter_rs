@@ -1,0 +1,10 @@
+/Users/d.ferents/projects/starter/target/debug/deps/num_bigint-5c8af0247a678496.d: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/macros.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/bigint.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/biguint.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/algorithms.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/monty.rs
+
+/Users/d.ferents/projects/starter/target/debug/deps/libnum_bigint-5c8af0247a678496.rmeta: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/macros.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/bigint.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/biguint.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/algorithms.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/monty.rs
+
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/lib.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/macros.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/bigint.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/biguint.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/algorithms.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.2.6/src/monty.rs:

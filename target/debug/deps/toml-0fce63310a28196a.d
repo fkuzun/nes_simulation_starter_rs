@@ -1,0 +1,13 @@
+/Users/d.ferents/projects/starter/target/debug/deps/toml-0fce63310a28196a.d: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/map.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/value.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/de.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/ser.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/macros.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/edit.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/fmt.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/table.rs
+
+/Users/d.ferents/projects/starter/target/debug/deps/libtoml-0fce63310a28196a.rmeta: /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/lib.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/map.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/value.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/de.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/ser.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/macros.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/edit.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/fmt.rs /Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/table.rs
+
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/lib.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/map.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/value.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/de.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/ser.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/macros.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/edit.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/fmt.rs:
+/Users/d.ferents/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.8.8/src/table.rs:

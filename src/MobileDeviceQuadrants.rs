@@ -1,15 +1,18 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
-use crate::{MobilityInputConfigList, ReconnectPredictorType};
+use crate::MobilityInputConfigList;
+use crate::ReconnectPredictorType;
 use crate::rest_node_relocation::{ISQPEvent, TopologyUpdate};
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 struct MobileEntry {
     device_id: u64,
     sources: Vec<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MobileDeviceQuadrants {
     //quadrant_map: BTreeMap<u64, Vec<(u64, Vec<String>)>>
@@ -52,6 +55,7 @@ impl From<QuadrantConfig> for MobileDeviceQuadrants {
     }
 }
 
+#[allow(dead_code)]
 impl MobileDeviceQuadrants {
     fn rotate_devices(&mut self) -> Vec<ISQPEvent> {
         let mut events = vec![];
@@ -179,6 +183,8 @@ impl MobileDeviceQuadrants {
     // }
 }
 
+#[cfg(test)]
+#[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 enum test {
     A(String),
@@ -186,12 +192,16 @@ enum test {
     C(innerTest),
 }
 
+#[cfg(test)]
+#[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct innerTest {
     x: u64,
     y: u64,
 }
 
+#[cfg(test)]
+#[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct testContainer {
     test1: test,

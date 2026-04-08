@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut rng = rand::thread_rng();
     let fixed_nodes_hosting_sources = if args.len() == 5 {
-        let source_count = args[6].parse::<u64>().expect("Invalid duration");
+        let _source_count = args[6].parse::<u64>().expect("Invalid duration");
         let mut numbers: Vec<u64> = vec![];
         for _i in 0..10 {
             let mut number = rng.gen_range(min_id..max_id);

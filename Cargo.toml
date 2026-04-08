@@ -36,27 +36,17 @@ name = "timestamp_reconnect_list"
 path = "src/timestamp_reconnect_list.rs"
 
 [[bin]]
-name = "retry_experiments"
-path = "src/retry_experiments.rs"
-
-[[bin]]
 name = "test_toml"
 path = "src/test_toml.rs"
-
-[[bin]]
-name = "simulated_reconnects_to_mobile_configs"
-path = "src/simulataed_reconnects_to_mobile_configs.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 ctrlc = { version = "3.4.0", features = ["termination"] }
-futures = "0.3.28"
 reqwest = { version = "0.11.18", features = ["json", "blocking", "native-tls-vendored"] }
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 serde_yaml = "0.9.21"
-text_io = "0.1.12"
 yaml-rust = "0.4.5"
 nes_tools = {path = "../nes_tools"}
 csv = "1.3.0"
@@ -69,7 +59,5 @@ regex = "1.10.3"
 relative-path = { version = "1.9.2", features = ["serde"] }
 execute = "0.2.13"
 itertools = "0.13.0"
-plotly = "0.9.0"
 avro-rs = "0.13.0"
 byteorder = "1.5.0"
-#plotters = "0.3.6"

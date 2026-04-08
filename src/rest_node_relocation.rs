@@ -3,7 +3,6 @@ use std::collections::{btree_map, BTreeMap};
 use std::error::Error;
 use std::ops::Add;
 use std::time;
-use chrono::Duration;
 use reqwest::{Url};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +13,7 @@ use serde_with::DurationMilliSeconds;
 use crate::add_edges_from_list;
 
 
+#[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum ISQPEventAction {
     add,
@@ -111,6 +111,7 @@ impl Default for TopologyUpdateList {
     }
 }
 
+#[allow(non_camel_case_types)]
 pub struct REST_topology_updater {
     topology_updates: Vec<TopologyUpdate>,
     initial_updates: Vec<(u64, u64)>,
@@ -121,6 +122,7 @@ pub struct REST_topology_updater {
     max_runtime: time::Duration,
 }
 
+#[allow(non_camel_case_types)]
 impl REST_topology_updater {
     pub fn new(topology_updates: Vec<TopologyUpdate>, start_time: time::Duration, speedup: f64, url: Url, initial_updates: Vec<(u64, u64)>, max_runtime: time::Duration) -> Self {
         Self {

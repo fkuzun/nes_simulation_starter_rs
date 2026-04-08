@@ -16,7 +16,7 @@ fn main() {
 
 
     let mut timestamp = Duration::new(0, 0);
-    let mut interval = Duration::new(1, 0);
+    let interval = Duration::new(1, 0);
 
     for mut reconnect in reconnects {
         reconnect.offset = timestamp;

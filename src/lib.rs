@@ -1,16 +1,17 @@
+#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 
-use byteorder::{LittleEndian, ReadBytesExt};
-use std::hash::Hasher;
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use byteorder::LittleEndian;
+use std::io::{Cursor, Write};
 
-use std::fmt::format;
 use std::fs::{read_to_string, File};
 use std::net::TcpListener;
-use std::ops::{Add, Deref, Range};
+use std::ops::Range;
 use std::process::{Child, Command};
-use std::{fs, io, sync, time};
+use std::{fs, time};
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -18,13 +19,9 @@ use std::path::PathBuf;
 
 use crate::rest_node_relocation::TopologyUpdate;
 use crate::FieldType::UINT64;
-use crate::WorkerConfigType::Fixed;
-use avro_rs::types::Record;
 use avro_rs::{Schema, Writer};
 use chrono::Local;
-use futures::AsyncWriteExt;
-use itertools::{assert_equal, Itertools};
-use nes_tools::launch::Launch;
+use itertools::Itertools;
 use nes_tools::query::SubmitQueryResponse;
 use nes_tools::topology::{
     AddEdgeReply, AddEdgeRequest, ExecuteQueryRequest, PlacementStrategyType,
@@ -40,17 +37,20 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 use yaml_rust::{YamlEmitter, YamlLoader};
 
 pub mod analyze;
 
+#[allow(non_snake_case)]
 mod MobileDeviceQuadrants;
 pub mod rest_node_relocation;
 
+#[allow(dead_code)]
 const INPUT_FOLDER_SUB_PATH: &'static str = "nes_experiment_input";
+#[allow(dead_code)]
 const INPUT_CONFIG_NAME: &'static str = "input_data_config.toml";
 //const PORT_RANGE: std::ops::Range<u16> = 10_000..20_000;
+#[allow(dead_code)]
 const PORT_RANGE: std::ops::Range<u16> = 7000..8000;
 
 pub const JOIN_QUERY: bool = true;
@@ -64,7 +64,7 @@ pub struct SimulatedReconnects {
 impl SimulatedReconnects {
     pub fn get_mobility_input_config_list(&self) -> MobilityInputConfigList {
         let mut mobility_configs = vec![];
-        for initial in &self.initial_parents {
+        for _initial in &self.initial_parents {
             let generated_mobility_config = InputMobilityconfig {
                 mobility_base_path: None,
                 //locationProviderConfig: output_trajectory_path,
@@ -86,10 +86,12 @@ impl SimulatedReconnects {
     }
 }
 
+#[allow(dead_code)]
 fn get_available_port(mut range: Range<u16>) -> Option<u16> {
     range.find(|port| port_is_available(*port))
 }
 
+#[allow(dead_code)]
 fn port_is_available(port: u16) -> bool {
     match TcpListener::bind(("127.0.0.1", port)) {
         Ok(_) => true,
@@ -345,6 +347,7 @@ impl SimulationConfig {
         self.input_config_path.clone()
     }
 
+    #[allow(dead_code)]
     fn read_input_config(&self) -> InputConfig {
         let input_config: InputConfig = toml::from_str(
             &*read_to_string(&self.get_input_config_path()).expect("Could not read config file"),
@@ -379,6 +382,7 @@ impl SimulationConfig {
         )
     }
 
+    #[allow(unused_assignments)]
     pub fn generate_retrials(
         &self,
         number_of_runs: u64,
@@ -691,6 +695,7 @@ pub struct InputConfig {
     source_count_map: HashMap<String, u64>,
 }
 
+#[allow(dead_code)]
 pub struct ExperimentSetup {
     output_config_directory: PathBuf,
     output_source_input_directory: PathBuf,
@@ -742,7 +747,7 @@ impl ExperimentSetup {
         shutdown_triggered: Arc<AtomicBool>,
         log_level: &LogLevel,
     ) -> Result<(), Box<dyn Error>> {
-        self.kill_processes();
+        let _ = self.kill_processes();
         self.fixed_worker_processes = vec![];
         self.mobile_worker_processes = vec![];
 
@@ -920,7 +925,7 @@ impl ExperimentSetup {
                 ))
                 //.arg("--logLevel=LOG_DEBUG")
                 .spawn()?;
-            self.fixed_worker_processes.push(process);
+            self.mobile_worker_processes.push(process);
         }
         Ok(())
     }
@@ -1111,39 +1116,6 @@ impl InputConfig {
             ],
         });
 
-
-              
-        println!("register fake_migration_source");
-        logicalSources.push(LogicalSource {
-            logicalSourceName: "fake_migration_source".to_owned(),
-            fields: vec![
-                LogicalSourceField {
-                    name: "id".to_string(),
-                    Type: UINT64,
-                },
-                LogicalSourceField {
-                    name: "join_id".to_string(),
-                    Type: UINT64,
-                },
-                LogicalSourceField {
-                    name: "value".to_string(),
-                    Type: UINT64,
-                },
-                LogicalSourceField {
-                    name: "event_timestamp".to_string(),
-                    Type: UINT64,
-                },
-                LogicalSourceField {
-                    name: "processing_timestamp".to_string(),
-                    Type: UINT64,
-                },
-                LogicalSourceField {
-                    name: "output_timestamp".to_string(),
-                    Type: UINT64,
-                },
-            ],
-        });
-
         println!("generating coordinator config");
         //generate coordinator config
         let coordinator_config = CoordinatorConfiguration {
@@ -1172,7 +1144,7 @@ impl InputConfig {
         };
 
         println!("generating fixed worker configs");
-        let mut next_free_port = 5000;
+        let mut _next_free_port = 5000;
         let mut fixed_config_paths = vec![];
         let num_buffers = self.get_data_production_time().as_millis()
             / self.default_source_input.gathering_interval.as_millis();
@@ -1207,7 +1179,7 @@ impl InputConfig {
             let yaml_path =
                 output_worker_config_directory.join(format!("fixed_worker{}.yaml", input_id));
             worker_config.write_to_file(&yaml_path)?;
-            next_free_port += 2;
+            _next_free_port += 2;
             // if (input_id == &2) {
             //     continue
             // }
@@ -1240,10 +1212,10 @@ impl InputConfig {
             };
 
         let mut generated_mobility_configs = vec![];
-        let mut central_topology_update_list = rest_node_relocation::TopologyUpdateList::new();
+        let central_topology_update_list = rest_node_relocation::TopologyUpdateList::new();
 
         println!("generating mobile worker configs");
-        for mut worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
+        for worker_mobility_input_config in mobility_input_config.worker_mobility_configs {
             let generated_mobility_config = InputMobilityconfig {
                 mobility_base_path: Some(output_trajectory_directory.clone()),
                 //locationProviderConfig: output_trajectory_path,
@@ -1288,7 +1260,7 @@ impl InputConfig {
             worker_config.write_to_file(&yaml_path)?;
             mobile_config_paths.push(yaml_path);
             input_id += 1;
-            next_free_port += 2;
+            _next_free_port += 2;
             let _num_tuples =
                 num_buffers as u64 * self.default_source_input.tuples_per_buffer as u64;
         }
@@ -1432,6 +1404,7 @@ pub struct MobilityInputConfigList {
 }
 
 impl MobilityInputConfigList {
+    #[allow(dead_code)]
     fn read_input_from_file(file_path: &Path) -> Result<Self, Box<dyn Error>> {
         let config: Self = toml::from_str(&read_to_string(file_path)?)?;
         Ok(config)
@@ -1442,18 +1415,6 @@ impl MobilityInputConfigList {
         let mut file = File::create(file_path).unwrap();
         file.write_all(toml_string.as_bytes()).unwrap();
     }
-}
-
-#[serde_as]
-#[derive(Debug, Deserialize, Serialize)]
-struct MobileWorkerWaypoint {
-    #[serde(rename = "column1")]
-    latitude: f64,
-    #[serde(rename = "column2")]
-    longitude: f64,
-    #[serde_as(as = "DurationNanoSeconds<u64>")]
-    #[serde(rename = "column3")]
-    offset: Duration,
 }
 
 #[serde_as]
@@ -1474,12 +1435,14 @@ pub struct FixedTopology {
     pub children: HashMap<u64, Vec<u64>>,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct ActualTopology {
     edges: Vec<Edge>,
     nodes: Vec<ActualNode>,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct ActualNode {
     available_resources: u16,
@@ -1489,18 +1452,21 @@ struct ActualNode {
     nodeType: String,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct Location {
     latitude: f64,
     longitude: f64,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct Edge {
     source: u64,
     target: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct ConnectivityReply {
     statusCode: u64,
@@ -1522,38 +1488,6 @@ struct PhysicalSourceConfiguration {
     //in millisec
     numberOfTuplesToProducePerBuffer: u64,
     //numberOfBuffersToProduce: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum SocketDomain {
-    AF_INET,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum SocketType {
-    SOCKET_STREAM,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum SourceInputFormat {
-    CSV,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum DecidedmMessageSize {
-    TUPLE_SEPARATOR,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct TCPSourceConfiguration {
-    socketDomain: SocketDomain,
-    socketType: SocketType,
-    port: u16,
-    host: String,
-    format: SourceInputFormat,
-    decideMessageSize: DecidedmMessageSize,
-    tupleSeparator: char,
-    flushIntervalMS: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1653,12 +1587,6 @@ impl InputMobilityconfig {
     }
 }
 
-enum LocationProviderType {
-    BASE,
-    CSV,
-    INVALID,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 enum FieldType {
     FLOAT64,
@@ -1742,39 +1670,6 @@ impl FixedWorkerConfig {
     }
 }
 
-struct LocalWorkerHandle {
-    config: WorkerConfigType,
-    command: Command,
-    process: Option<Child>,
-    tmp_dir: String,
-}
-
-struct ProvisionalWorkerHandle {
-    config: WorkerConfigType,
-    process: Child,
-    children: Vec<u64>,
-}
-
-trait WorkerHandle {
-    fn get_nes_id(&self) -> u64;
-}
-
-impl LocalWorkerHandle {
-    fn new_fixed_location_worker(command: &str, config: FixedWorkerConfig, tmp_dir: &str) -> Self {
-        Self {
-            config: Fixed(config),
-            command: Command::new(command),
-            process: None,
-            tmp_dir: tmp_dir.to_owned(),
-        }
-    }
-}
-
-enum WorkerConfigType {
-    Fixed(FixedWorkerConfig),
-    Mobile(MobileWorkerConfig),
-}
-
 #[derive(Debug, Deserialize, Copy, Clone)]
 pub enum OutputType {
     CSV,
@@ -1782,7 +1677,7 @@ pub enum OutputType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct OutputTuple {
+pub struct OutputTuple {
     win_start: u64,
     win_end: u64,
     id_1: u64,
@@ -1899,25 +1794,6 @@ impl OutputWriter for AvroOutputWriter {
         // let mut writer = Writer::new(&schema, file);
         let encoded = writer.into_inner().unwrap();
         self.file.write_all(&encoded)?;
-        Ok(())
-    }
-}
-
-pub struct FileOutputWriter {
-    pub file: File,
-}
-
-impl OutputWriter for FileOutputWriter {
-    fn write(&mut self, tuple: OutputTuple) -> Result<(), Box<dyn Error>> {
-        todo!()
-        // let tuple_string = format!("{},{},{},{},{}", tuple.id, tuple.sequence_number, tuple.event_time, tuple.processing_time, tuple.emission_time);
-        // self.file.write_all(tuple_string.as_bytes())?;
-        // self.file.write_all(b"\n")?;
-        // Ok(())
-    }
-
-    fn flush(&mut self) -> Result<(), Box<dyn Error>> {
-        self.file.flush()?;
         Ok(())
     }
 }
@@ -2091,73 +1967,6 @@ pub async fn handle_connection<W: ?Sized + OutputWriter>(
     Ok(())
 }
 
-fn get_tuple_string(binary_tuple: &[u8]) -> String {
-    let id = u64::from_le_bytes([
-        binary_tuple[0],
-        binary_tuple[1],
-        binary_tuple[2],
-        binary_tuple[3],
-        binary_tuple[4],
-        binary_tuple[5],
-        binary_tuple[6],
-        binary_tuple[7],
-    ]);
-    let sequence_number = u64::from_le_bytes([
-        binary_tuple[8],
-        binary_tuple[9],
-        binary_tuple[10],
-        binary_tuple[11],
-        binary_tuple[12],
-        binary_tuple[13],
-        binary_tuple[14],
-        binary_tuple[15],
-    ]);
-    let event_timestamp = u64::from_le_bytes([
-        binary_tuple[16],
-        binary_tuple[17],
-        binary_tuple[18],
-        binary_tuple[19],
-        binary_tuple[20],
-        binary_tuple[21],
-        binary_tuple[22],
-        binary_tuple[23],
-    ]);
-    let ingestion_timestamp = u64::from_le_bytes([
-        binary_tuple[24],
-        binary_tuple[25],
-        binary_tuple[26],
-        binary_tuple[27],
-        binary_tuple[28],
-        binary_tuple[29],
-        binary_tuple[30],
-        binary_tuple[31],
-    ]);
-    let output_timestamp = u64::from_le_bytes([
-        binary_tuple[32],
-        binary_tuple[33],
-        binary_tuple[34],
-        binary_tuple[35],
-        binary_tuple[36],
-        binary_tuple[37],
-        binary_tuple[38],
-        binary_tuple[39],
-    ]);
-    format!(
-        "{},{},{},{},{}",
-        id, sequence_number, event_timestamp, ingestion_timestamp, output_timestamp
-    )
-}
-
-fn count_lines_in_file(file_path: &Path) -> io::Result<usize> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut line_count = 0;
-    for _line in reader.lines() {
-        line_count += 1;
-    }
-    Ok(line_count)
-}
-
 fn create_folder_with_timestamp(mut path: PathBuf, prefix: &str) -> PathBuf {
     // Get the current date and time in the local timezone
     let current_time: chrono::DateTime<Local> = Local::now();
@@ -2234,56 +2043,6 @@ pub fn print_topology(restPort: u16) -> std::result::Result<(), Box<dyn Error>> 
         //println!("topology contains {} nodes", size);
     }
     Ok(())
-}
-
-fn create_csv_file(file_path: &str, id: u32, num_rows: usize) -> Result<(), Box<dyn Error>> {
-    // Create or open the CSV file
-    let file = File::create(file_path)?;
-
-    // Create a CSV writer
-    let mut csv_writer = csv::WriterBuilder::new()
-        .has_headers(false)
-        .from_writer(file);
-
-    // Write rows to the CSV file
-    for sequence_number in 0..num_rows {
-        // Write the id and sequence number to the CSV file
-        csv_writer.write_record(&[id.to_string(), sequence_number.to_string()])?;
-    }
-
-    // Flush the CSV writer to ensure all data is written to the file
-    csv_writer.flush()?;
-
-    Ok(())
-}
-
-fn create_input_source_data(
-    directory_path: &Path,
-    id: u32,
-    num_buffers: usize,
-    tuples_per_buffer: usize,
-) -> Result<PathBuf, Box<dyn Error>> {
-    // Create the directory if it doesn't exist
-    fs::create_dir_all(directory_path)?;
-
-    let file_name = format!("source_input{}.csv", id);
-
-    // Construct the full file path
-    let file_path = Path::new(directory_path).join(&file_name);
-
-    // Calculate the number of rows based on the experiment runtime, gathering interval, and tuples per buffer
-    let num_rows = tuples_per_buffer * num_buffers;
-
-    // Call the create_csv_file function to generate the CSV file
-    create_csv_file(
-        file_path.to_str().ok_or("Error getting file string")?,
-        id,
-        num_rows,
-    )?;
-
-    println!("Input file created: {}", file_path.display());
-
-    Ok(file_path)
 }
 
 pub fn get_expected_join_output_count(
