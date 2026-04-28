@@ -3,7 +3,7 @@ use std::path::Path;
 
 use itertools::Itertools;
 
-use crate::config::JOIN_QUERY;
+use crate::config::ExperimentType;
 
 /// Parse the source groups JSON file and return a map of node IDs to source names.
 /// The JSON file maps u64 node IDs to vectors of u64 source IDs; this function
@@ -35,11 +35,12 @@ pub fn build_query_strings(
     query_template: &str,
     window_size: u64,
     query_duplication_factor: usize,
+    experiment_type: ExperimentType,
 ) -> Vec<String> {
     let place_default_sources_on_node_ids = parse_source_groups(source_groups_path);
     let mut query_strings = vec![];
 
-    if JOIN_QUERY {
+    if experiment_type.is_stateful() {
         let mut source_count_map = HashMap::<String, u64>::new();
 
         for v in place_default_sources_on_node_ids.values().flatten() {

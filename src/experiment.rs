@@ -17,10 +17,9 @@ use regex::Regex;
 use relative_path::RelativePathBuf;
 
 use crate::config::{
-    FixedTopology, InputConfig, InputMobilityconfig, LogLevel,
+    ExperimentType, FixedTopology, InputConfig, InputMobilityconfig, LogLevel,
     MobilityInputConfigList, SimulatedReconnects, SimulationConfig, SourceInputMethod,
 };
-use crate::config::JOIN_QUERY;
 use crate::nes_types::{
     CoordinatorConfiguration, FieldType, FixedWorkerConfig, LogicalSource, LogicalSourceField,
     MobileWorkerConfig, OptimizerConfiguration, PhysicalSource, PhysicalSourceConfiguration,
@@ -260,6 +259,7 @@ impl InputConfig {
     fn generate_output_config(
         &mut self,
         generated_folder: &Path,
+        experiment_type: ExperimentType,
     ) -> Result<ExperimentSetup, Box<dyn Error>> {
         println!("generating output config");
         let output_config_directory = generated_folder.join("config");
@@ -282,7 +282,7 @@ impl InputConfig {
         let place_default_sources_on_node_ids =
             parse_source_groups(&self.parameters.place_default_sources_on_node_ids_path);
 
-        let names = if !JOIN_QUERY {
+        let names = if !experiment_type.is_stateful() {
             place_default_sources_on_node_ids
                 .into_values()
                 .flatten()
@@ -303,53 +303,18 @@ impl InputConfig {
             println!("map: {:#?}", source_count_map);
             names
         };
-        for n in &names {
-            println!("name: {}", n);
-        }
-        for name in names {
-            logicalSources.push(LogicalSource {
-                logicalSourceName: name.to_string(),
-                fields: vec![
-                    LogicalSourceField {
-                        name: "id".to_string(),
-                        Type: FieldType::UINT64,
-                    },
-                    LogicalSourceField {
-                        name: "join_id".to_string(),
-                        Type: FieldType::UINT64,
-                    },
-                    LogicalSourceField {
-                        name: "value".to_string(),
-                        Type: FieldType::UINT64,
-                    },
-                    LogicalSourceField {
-                        name: "event_timestamp".to_string(),
-                        Type: FieldType::UINT64,
-                    },
-                    LogicalSourceField {
-                        name: "processing_timestamp".to_string(),
-                        Type: FieldType::UINT64,
-                    },
-                    LogicalSourceField {
-                        name: "output_timestamp".to_string(),
-                        Type: FieldType::UINT64,
-                    },
-                ],
-            });
-        }
-
-        println!("register fake_migration_source");
-        logicalSources.push(LogicalSource {
-            logicalSourceName: "fake_migration_source".to_owned(),
-            fields: vec![
-                LogicalSourceField {
-                    name: "id".to_string(),
-                    Type: FieldType::UINT64,
-                },
-                LogicalSourceField {
+        let source_fields = |include_join_id: bool| -> Vec<LogicalSourceField> {
+            let mut fields = vec![LogicalSourceField {
+                name: "id".to_string(),
+                Type: FieldType::UINT64,
+            }];
+            if include_join_id {
+                fields.push(LogicalSourceField {
                     name: "join_id".to_string(),
                     Type: FieldType::UINT64,
-                },
+                });
+            }
+            fields.extend([
                 LogicalSourceField {
                     name: "value".to_string(),
                     Type: FieldType::UINT64,
@@ -366,7 +331,23 @@ impl InputConfig {
                     name: "output_timestamp".to_string(),
                     Type: FieldType::UINT64,
                 },
-            ],
+            ]);
+            fields
+        };
+        for n in &names {
+            println!("name: {}", n);
+        }
+        for name in names {
+            logicalSources.push(LogicalSource {
+                logicalSourceName: name.to_string(),
+                fields: source_fields(experiment_type.is_stateful()),
+            });
+        }
+
+        println!("register fake_migration_source");
+        logicalSources.push(LogicalSource {
+            logicalSourceName: "fake_migration_source".to_owned(),
+            fields: source_fields(experiment_type.is_stateful()),
         });
 
         println!("generating coordinator config");
@@ -416,6 +397,7 @@ impl InputConfig {
                 &mut total_number_of_tuples_to_emit,
                 *input_id + 1,
                 &source_groups,
+                experiment_type,
             );
             let worker_config = FixedWorkerConfig {
                 rpcPort: None,
@@ -476,6 +458,7 @@ impl InputConfig {
                 &mut total_number_of_tuples_to_emit,
                 input_id + 1,
                 &source_groups,
+                experiment_type,
             );
 
             let worker_config = MobileWorkerConfig {
@@ -525,7 +508,7 @@ impl InputConfig {
 
         // For join queries, each source pair produces one output per matched input,
         // so expected output = half total input.
-        let total_number_of_tuples_to_emit = if JOIN_QUERY {
+        let total_number_of_tuples_to_emit = if experiment_type.is_stateful() {
             total_number_of_tuples_to_emit / 2
         } else {
             total_number_of_tuples_to_emit
@@ -558,6 +541,7 @@ impl InputConfig {
         total_number_of_tuples_to_ingest: &mut u64,
         input_id: u64,
         place_default_sources_on_node_ids: &HashMap<String, Vec<String>>,
+        experiment_type: ExperimentType,
     ) -> (Vec<PhysicalSource>, Option<u16>) {
         let (physical_sources, number_of_slots) = if let Some((_, logical_source_names)) =
             place_default_sources_on_node_ids.get_key_value(&input_id.to_string())
@@ -573,7 +557,7 @@ impl InputConfig {
                     .or_insert(0);
                 *source_count += 1;
 
-                let num_tuples = if JOIN_QUERY {
+                let num_tuples = if experiment_type.is_stateful() {
                     get_expected_join_output_count(
                         num_tuples,
                         self.parameters.window_size,
@@ -588,7 +572,11 @@ impl InputConfig {
                     logical_source_name, num_tuples, *total_number_of_tuples_to_ingest
                 );
                 *total_number_of_tuples_to_ingest += num_tuples;
-                let logical_source_name = format!("{}s{}", logical_source_name, source_count);
+                let logical_source_name = if experiment_type.is_stateful() {
+                    format!("{}s{}", logical_source_name, source_count)
+                } else {
+                    logical_source_name.clone()
+                };
                 println!("{}", logical_source_name);
                 sources.push(PhysicalSource {
                     logicalSourceName: logical_source_name,
@@ -722,7 +710,7 @@ impl SimulationConfig {
             file.write_all(toml_string.as_bytes())?;
 
             setups.push((
-                input_config.generate_output_config(&generated_folder)?,
+                input_config.generate_output_config(&generated_folder, self.experiment_type)?,
                 runs,
             ));
         }

@@ -19,27 +19,32 @@ use tokio::time::timeout;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 5 || args.len() > 8 {
-        eprintln!("Usage: {} <nes directory> <experiment input config path> <output directory> <tcp input server executable> <log level (optional)>, <experiment path for retrial (optional)>", args[0]);
+    if args.len() < 7 || args.len() > 9 {
+        eprintln!("Usage: {} <STATEFUL|STATELESS> <nes directory> <experiment input config path> <output directory> <tcp input server executable> <number of runs> <log level (optional)> <experiment path for retrial (optional)>", args[0]);
         std::process::exit(1);
     }
 
-    let nes_root_dir = PathBuf::from(&args[1]);
-    let input_config_path = PathBuf::from(&args[2]);
-    let output_directory = PathBuf::from(&args[3]);
-    let input_server_path = PathBuf::from(&args[4]);
-    let runs: u64 = args[5].parse().unwrap();
-    let log_level: LogLevel = if args.len() >= 7 {
-        println!("Log level: {}", &args[6]);
-        serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[6])).unwrap_or_else(|e| {
+    let experiment_type: ExperimentType =
+        serde_json::from_str(&format!("\"{}\"", &args[1])).unwrap_or_else(|e| {
+            eprintln!("Could not parse experiment type '{}': {}", &args[1], e);
+            std::process::exit(1);
+        });
+    let nes_root_dir = PathBuf::from(&args[2]);
+    let input_config_path = PathBuf::from(&args[3]);
+    let output_directory = PathBuf::from(&args[4]);
+    let input_server_path = PathBuf::from(&args[5]);
+    let runs: u64 = args[6].parse().unwrap();
+    let log_level: LogLevel = if args.len() >= 8 {
+        println!("Log level: {}", &args[7]);
+        serde_json::from_str::<LogLevel>(&format!("\"{}\"", &args[7])).unwrap_or_else(|e| {
             eprintln!("Could not parse log level: {}", e);
             LogLevel::LOG_ERROR
         })
     } else {
         LogLevel::LOG_ERROR
     };
-    let run_for_retrial_path = if args.len() == 8 {
-        Some(PathBuf::from(&args[7]))
+    let run_for_retrial_path = if args.len() == 9 {
+        Some(PathBuf::from(&args[8]))
     } else {
         None
     };
@@ -55,6 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         output_directory: output_directory.clone(),
         run_for_retrial_path,
         output_type: OutputType::AVRO,
+        experiment_type,
     };
     let nes_executable_paths = NesExecutablePaths::new(&simulation_config);
     let _coordinator_path = &nes_executable_paths.coordinator_path;
@@ -108,7 +114,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let now: DateTime<Local> = Local::now();
                 println!("{}: Starting attempt {}", now, attempt);
                 println!("starting input server");
-                let mut source_input_server_process = Command::new(&input_server_path)
+                let mut source_input_server_command = Command::new(&input_server_path);
+                source_input_server_command
                     .arg("127.0.0.1")
                     .arg(
                         experiment
@@ -140,14 +147,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                             .as_millis()
                             .to_string(),
                     )
-                    .arg(
-                        experiment
-                            .input_config
-                            .parameters
-                            .join_match_interval
-                            .to_string(),
-                    )
-                    .spawn()?;
+                    .arg(if simulation_config.experiment_type.is_stateful() {
+                        "STATEFUL"
+                    } else {
+                        "STATELESS"
+                    });
+                if simulation_config.experiment_type.is_stateful() {
+                    source_input_server_command
+                        .arg(experiment.input_config.parameters.join_match_interval.to_string());
+                }
+                let mut source_input_server_process = source_input_server_command.spawn()?;
                 println!(
                     "input server process id {}",
                     source_input_server_process.id()
@@ -184,7 +193,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                     let file = File::create(&file_path).unwrap();
 
-                    let file = Arc::new(Mutex::new(AvroOutputWriter::new(file)));
+                    let file = Arc::new(Mutex::new(if simulation_config.experiment_type.is_stateful() {
+                        OutputBundle::Stateful(AvroOutputWriter::new(file))
+                    } else {
+                        OutputBundle::Stateless(AvroOutputWriterStateless::new(file))
+                    }));
 
                     let completed_threads = AtomicUsize::new(0);
                     let completed_threads = Arc::new(completed_threads);
@@ -195,6 +208,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         &query_string,
                         experiment.input_config.parameters.window_size,
                         experiment.input_config.parameters.query_duplication_factor,
+                        simulation_config.experiment_type,
                     );
 
                     dbg!(&query_strings);
@@ -243,6 +257,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                                 experiment_start_clone,
                                                 timeout_duration,
                                                 simulation_config.output_type,
+                                                simulation_config.experiment_type,
                                             )
                                             .await
                                             {

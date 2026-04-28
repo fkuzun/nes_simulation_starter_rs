@@ -23,7 +23,17 @@ pub const INPUT_CONFIG_NAME: &str = "input_data_config.toml";
 #[allow(dead_code)]
 pub const PORT_RANGE: std::ops::Range<u16> = 7000..8000;
 
-pub const JOIN_QUERY: bool = true;
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone)]
+pub enum ExperimentType {
+    STATEFUL,
+    STATELESS,
+}
+
+impl ExperimentType {
+    pub fn is_stateful(self) -> bool {
+        matches!(self, ExperimentType::STATEFUL)
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum ReconnectPredictorType {
@@ -328,6 +338,7 @@ pub struct SimulationConfig {
     pub input_config_path: PathBuf,
     pub run_for_retrial_path: Option<PathBuf>,
     pub output_type: OutputType,
+    pub experiment_type: ExperimentType,
 }
 
 impl SimulationConfig {
