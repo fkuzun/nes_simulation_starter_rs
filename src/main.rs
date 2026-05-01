@@ -79,6 +79,53 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
+    let live_port: u16 = env::var("LIVE_LATENCY_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9001);
+
+    let (live_tx, _) = tokio::sync::broadcast::channel::<String>(1024);
+    {
+        let live_tx_listen = live_tx.clone();
+        rt.spawn(async move {
+            let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", live_port)).await {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("[live_latency] bind 0.0.0.0:{} failed: {}", live_port, e);
+                    return;
+                }
+            };
+            eprintln!("[live_latency] TCP listener on 0.0.0.0:{}", live_port);
+            loop {
+                let (mut sock, peer) = match listener.accept().await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("[live_latency] accept error: {}", e);
+                        continue;
+                    }
+                };
+                eprintln!("[live_latency] client connected: {}", peer);
+                let mut rx = live_tx_listen.subscribe();
+                tokio::spawn(async move {
+                    use tokio::io::AsyncWriteExt;
+                    loop {
+                        match rx.recv().await {
+                            Ok(line) => {
+                                if sock.write_all(line.as_bytes()).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                eprintln!("[live_latency] client {} lagged by {} frames", peer, n);
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                });
+            }
+        });
+    }
+
     let total_number_of_runs = experiments.len();
     for (index, (experiment, runs)) in experiments.iter_mut().enumerate() {
         let run_number = index + 1;
@@ -192,7 +239,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         attempt
                     );
 
-                    let sink = Arc::new(Mutex::new(LiveLatencySink::new_stdout()));
+                    let sink = Arc::new(Mutex::new(LiveLatencySink::new_tcp(live_tx.clone())));
 
                     let completed_threads = AtomicUsize::new(0);
                     let completed_threads = Arc::new(completed_threads);

@@ -3,6 +3,7 @@ use std::io::{self, Write};
 
 use hdrhistogram::Histogram;
 use serde::Serialize;
+use tokio::sync::broadcast;
 
 use crate::output::{OutputTuple, OutputTupleStateless};
 
@@ -16,7 +17,7 @@ pub struct LiveLatencySink {
 
 enum SinkKind {
     Stdout,
-    // TODO: Tcp(BufWriter<TcpStream>) — fill in once the graph endpoint is decided.
+    Tcp(broadcast::Sender<String>),
 }
 
 struct BucketState {
@@ -74,6 +75,14 @@ impl LiveLatencySink {
     pub fn new_stdout() -> Self {
         Self {
             sink: SinkKind::Stdout,
+            current: None,
+            late_tuples: 0,
+        }
+    }
+
+    pub fn new_tcp(tx: broadcast::Sender<String>) -> Self {
+        Self {
+            sink: SinkKind::Tcp(tx),
             current: None,
             late_tuples: 0,
         }
@@ -154,6 +163,9 @@ impl LiveLatencySink {
                 let mut h = stdout.lock();
                 h.write_all(line.as_bytes())?;
                 h.write_all(b"\n")?;
+            }
+            SinkKind::Tcp(tx) => {
+                let _ = tx.send(format!("{}\n", line));
             }
         }
         Ok(())
