@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use reqwest::Url;
-use simulation_runner_lib::analyze::create_notebook;
+use simulation_runner_lib::live_latency::LiveLatencySink;
 use simulation_runner_lib::*;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
@@ -191,13 +191,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                         &experiment.experiment_output_path.to_str().unwrap(),
                         attempt
                     );
-                    let file = File::create(&file_path).unwrap();
 
-                    let file = Arc::new(Mutex::new(if simulation_config.experiment_type.is_stateful() {
-                        OutputBundle::Stateful(AvroOutputWriter::new(file))
-                    } else {
-                        OutputBundle::Stateless(AvroOutputWriterStateless::new(file))
-                    }));
+                    let sink = Arc::new(Mutex::new(LiveLatencySink::new_stdout()));
 
                     let completed_threads = AtomicUsize::new(0);
                     let completed_threads = Arc::new(completed_threads);
@@ -237,7 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                                 match accept_result {
                                     Ok(Ok((stream, _))) => {
-                                        let file_clone = file.clone();
+                                        let sink_clone = sink.clone();
                                         let line_count_clone = line_count.clone();
                                         let shutdown_triggered_clone =
                                             shutdown_triggered.clone();
@@ -252,7 +247,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                                 line_count_clone,
                                                 desired_line_count_per_thread,
                                                 desired_line_count_copy,
-                                                file_clone.clone(),
+                                                sink_clone.clone(),
                                                 shutdown_triggered_clone,
                                                 experiment_start_clone,
                                                 timeout_duration,
@@ -295,11 +290,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             >= desired_line_count as usize
                                         || shutdown_triggered.load(Ordering::SeqCst)
                                     {
-                                        println!("flushing file");
-                                        file.lock()
+                                        println!("flushing live latency sink");
+                                        sink.lock()
                                             .unwrap()
                                             .flush()
-                                            .expect("TODO: panic message");
+                                            .expect("live latency sink flush failed");
                                         break;
                                     }
                                     println!(
@@ -372,17 +367,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 .as_bytes(),
                         )
                         .expect("Error while writing reconnect list to file");
-                    if let Some(notebook_path) = &simulation_config.get_analysis_script_path() {
-                        create_notebook(
-                            &PathBuf::from(&file_path),
-                            &notebook_path,
-                            &experiment
-                                .generated_folder
-                                .join(format!("analysis_run{}.ipynb", attempt)),
-                        )?;
-                    } else {
-                        println!("No analysis script defined")
-                    }
+                    println!("Live latency mode: skipping notebook analysis (no Avro file produced)");
                     if shutdown_triggered.load(Ordering::SeqCst) {
                         break;
                     }

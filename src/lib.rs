@@ -4,6 +4,7 @@
 pub mod analyze;
 pub mod config;
 pub mod experiment;
+pub mod live_latency;
 pub mod nes_types;
 pub mod output;
 pub mod query;
