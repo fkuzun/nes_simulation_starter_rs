@@ -167,21 +167,17 @@ impl LiveLatencySink {
                 let mut h = stdout.lock();
                 h.write_all(line.as_bytes())?;
                 h.write_all(b"\n")?;
-                if self.frames_emitted == 1 || self.frames_emitted % 50 == 0 {
-                    eprintln!(
-                        "[live_latency] emitted frame #{} (stdout) t_ms={} count={} mean_ms={:.2}",
-                        self.frames_emitted, frame.t_ms, frame.count, frame.mean_ms
-                    );
-                }
+                eprintln!(
+                    "[live_latency] emitted frame #{} (stdout) t_ms={} count={} mean_ms={:.2}",
+                    self.frames_emitted, frame.t_ms, frame.count, frame.mean_ms
+                );
             }
             SinkKind::Tcp(tx) => {
                 let subscribers = tx.send(format!("{}\n", line)).unwrap_or(0);
-                if self.frames_emitted == 1 || self.frames_emitted % 50 == 0 {
-                    eprintln!(
-                        "[live_latency] emitted frame #{} subscribers={} t_ms={} count={} mean_ms={:.2}",
-                        self.frames_emitted, subscribers, frame.t_ms, frame.count, frame.mean_ms
-                    );
-                }
+                eprintln!(
+                    "[live_latency] emitted frame #{} subscribers={} t_ms={} count={} mean_ms={:.2}",
+                    self.frames_emitted, subscribers, frame.t_ms, frame.count, frame.mean_ms
+                );
             }
         }
         Ok(())
