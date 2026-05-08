@@ -13,6 +13,7 @@ pub struct LiveLatencySink {
     sink: SinkKind,
     current: Option<BucketState>,
     late_tuples: u64,
+    frames_emitted: u64,
 }
 
 enum SinkKind {
@@ -77,6 +78,7 @@ impl LiveLatencySink {
             sink: SinkKind::Stdout,
             current: None,
             late_tuples: 0,
+            frames_emitted: 0,
         }
     }
 
@@ -85,6 +87,7 @@ impl LiveLatencySink {
             sink: SinkKind::Tcp(tx),
             current: None,
             late_tuples: 0,
+            frames_emitted: 0,
         }
     }
 
@@ -157,15 +160,28 @@ impl LiveLatencySink {
             },
         };
         let line = serde_json::to_string(&frame).expect("LatencyFrame serialization");
+        self.frames_emitted += 1;
         match &mut self.sink {
             SinkKind::Stdout => {
                 let stdout = io::stdout();
                 let mut h = stdout.lock();
                 h.write_all(line.as_bytes())?;
                 h.write_all(b"\n")?;
+                if self.frames_emitted == 1 || self.frames_emitted % 50 == 0 {
+                    eprintln!(
+                        "[live_latency] emitted frame #{} (stdout) t_ms={} count={} mean_ms={:.2}",
+                        self.frames_emitted, frame.t_ms, frame.count, frame.mean_ms
+                    );
+                }
             }
             SinkKind::Tcp(tx) => {
-                let _ = tx.send(format!("{}\n", line));
+                let subscribers = tx.send(format!("{}\n", line)).unwrap_or(0);
+                if self.frames_emitted == 1 || self.frames_emitted % 50 == 0 {
+                    eprintln!(
+                        "[live_latency] emitted frame #{} subscribers={} t_ms={} count={} mean_ms={:.2}",
+                        self.frames_emitted, subscribers, frame.t_ms, frame.count, frame.mean_ms
+                    );
+                }
             }
         }
         Ok(())

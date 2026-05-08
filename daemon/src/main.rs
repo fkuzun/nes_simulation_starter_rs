@@ -94,6 +94,41 @@ async fn start_handler(State(state): State<AppState>) -> impl IntoResponse {
     info!("spawning simulator: bin={} type={} nes_dir={} toml={} output={} tcp_input={} runs={} live_port={}",
         sim_bin, sim_type, sim_nes_dir, sim_toml, sim_output_dir, sim_tcp_input_bin, sim_runs, live_port);
 
+    if let Err(e) = std::fs::create_dir_all(&sim_output_dir) {
+        error!("failed to create output dir {}: {}", sim_output_dir, e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": format!("mkdir {} failed: {}", sim_output_dir, e)})),
+        )
+            .into_response();
+    }
+
+    let run_log_path = format!("{}/run.log", sim_output_dir);
+    let run_pid_path = format!("{}/run.pid", sim_output_dir);
+
+    let run_log = match std::fs::File::create(&run_log_path) {
+        Ok(f) => f,
+        Err(e) => {
+            error!("failed to create {}: {}", run_log_path, e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("create {} failed: {}", run_log_path, e)})),
+            )
+                .into_response();
+        }
+    };
+    let run_log_err = match run_log.try_clone() {
+        Ok(f) => f,
+        Err(e) => {
+            error!("failed to clone {} fd: {}", run_log_path, e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("clone fd failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
     let child_result = Command::new(&sim_bin)
         .args([
             &sim_type,
@@ -104,23 +139,19 @@ async fn start_handler(State(state): State<AppState>) -> impl IntoResponse {
             &sim_runs,
         ])
         .env("LIVE_LATENCY_PORT", &live_port)
-        .stdout(Stdio::from(
-            std::fs::File::create("/tmp/berlin-trams-sim.log").unwrap(),
-        ))
-        .stderr(Stdio::from(
-            std::fs::File::create("/tmp/berlin-trams-sim.err").unwrap(),
-        ))
+        .stdout(Stdio::from(run_log))
+        .stderr(Stdio::from(run_log_err))
         .spawn();
 
     match child_result {
         Ok(child) => {
             let pid = child.id();
-            info!("simulator spawned successfully, pid={}", pid);
+            info!("simulator spawned successfully, pid={} (log={} pid_file={})", pid, run_log_path, run_pid_path);
 
-            let _ = std::fs::write("/tmp/berlin-trams-sim.pid", pid.to_string());
+            let _ = std::fs::write(&run_pid_path, pid.to_string());
 
             *guard = Some(child);
-            (StatusCode::OK, Json(serde_json::json!({"ok": true, "pid": pid}))).into_response()
+            (StatusCode::OK, Json(serde_json::json!({"ok": true, "pid": pid, "log": run_log_path, "pid_file": run_pid_path}))).into_response()
         }
         Err(e) => {
             error!("failed to spawn simulator: {} (bin={})", e, sim_bin);
@@ -176,7 +207,9 @@ async fn stop_handler(State(state): State<AppState>) -> impl IntoResponse {
     }
 
     *guard = None;
-    let _ = std::fs::remove_file("/tmp/berlin-trams-sim.pid");
+    if let Ok(dir) = std::env::var("SIM_OUTPUT_DIR") {
+        let _ = std::fs::remove_file(format!("{}/run.pid", dir));
+    }
 
     info!("running kill chain for orphaned NES processes");
     match Command::new("sh").arg("-c").arg(KILL_CHAIN).status() {
