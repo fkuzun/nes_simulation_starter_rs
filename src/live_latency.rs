@@ -7,7 +7,7 @@ use tokio::sync::broadcast;
 
 use crate::output::{OutputTuple, OutputTupleStateless};
 
-const BUCKET_NS: u64 = 100_000_000;
+const BUCKET_NS: u64 = 1_000_000;
 
 pub struct LiveLatencySink {
     sink: SinkKind,
