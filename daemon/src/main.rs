@@ -252,6 +252,78 @@ async fn healthz_handler() -> impl IntoResponse {
     StatusCode::OK
 }
 
+async fn deployment_handler() -> impl IntoResponse {
+    info!("GET /deployment received");
+
+    let sim_output_dir = match std::env::var("SIM_OUTPUT_DIR") {
+        Ok(v) => v,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "SIM_OUTPUT_DIR not set"})),
+            )
+                .into_response();
+        }
+    };
+
+    let log_path = format!("{}/run.log", sim_output_dir);
+    let raw = match std::fs::read_to_string(&log_path) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("GET /deployment: read {} failed: {}", log_path, e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("read {}: {}", log_path, e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let ansi = regex::Regex::new(r"\x1B\[[0-9;]*[a-zA-Z]").unwrap();
+    let cleaned = ansi.replace_all(&raw, "");
+
+    let latest: &str = match cleaned.rsplit_once("Starting experiment") {
+        Some((_, tail)) => tail,
+        None => cleaned.as_ref(),
+    };
+
+    let isqp_re = regex::Regex::new(
+        r"Total Time to process ISQP Request=(\d+); placementTime=(\d+); deploymentTime=(\d+)",
+    )
+    .unwrap();
+
+    let mut request_ns: u64 = 0;
+    let mut placement_ns: u64 = 0;
+    let mut deployment_ns: u64 = 0;
+    let mut count: u64 = 0;
+    for cap in isqp_re.captures_iter(latest) {
+        request_ns    += cap[1].parse::<u64>().unwrap_or(0);
+        placement_ns  += cap[2].parse::<u64>().unwrap_or(0);
+        deployment_ns += cap[3].parse::<u64>().unwrap_or(0);
+        count += 1;
+    }
+
+    let to_sec = |ns: u64| (ns as f64) / 1_000_000_000.0;
+    let deploy = to_sec(deployment_ns);
+    let opt_total = to_sec(request_ns);
+    let placement = to_sec(placement_ns);
+    let other_opt = (opt_total - deploy - placement).max(0.0);
+
+    info!(
+        "GET /deployment -> deploy={:.3}s optTotal={:.3}s placement={:.3}s otherOpt={:.3}s reconfigurations={}",
+        deploy, opt_total, placement, other_opt, count
+    );
+
+    Json(serde_json::json!({
+        "deploy": deploy,
+        "optTotal": opt_total,
+        "placement": placement,
+        "otherOpt": other_opt,
+        "reconfigurations": count,
+    }))
+    .into_response()
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -280,6 +352,7 @@ async fn main() {
         .route("/start", post(start_handler))
         .route("/stop", post(stop_handler))
         .route("/status", get(status_handler))
+        .route("/deployment", get(deployment_handler))
         .route("/healthz", get(healthz_handler))
         .with_state(state);
 
