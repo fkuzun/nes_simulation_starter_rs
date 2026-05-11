@@ -427,6 +427,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             experiment.kill_processes()?;
+            let subscribers = live_tx.send("{\"eof\":true}\n".to_string()).unwrap_or(0);
+            eprintln!("[live_latency] emitted eof marker (subscribers={})", subscribers);
             let wait_time = 30;
             println!(
                 "Finished run sleeping {} seconds before next run",
