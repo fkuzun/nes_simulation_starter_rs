@@ -5,11 +5,15 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 const KILL_CHAIN: &str = r#"ps -ef | grep 'nesCoordinator' | grep -v grep | awk '{print $2}' | xargs -r kill -9 && ps -ef | grep 'nesWorker' | grep -v grep | awk '{print $2}' | xargs -r kill -9 && ps -ef | grep 'tcp_input_server' | grep -v grep | awk '{print $2}' | xargs -r kill -9"#;
 
@@ -38,8 +42,103 @@ fn env_required(name: &str) -> Result<String, (StatusCode, String)> {
     })
 }
 
-async fn start_handler(State(state): State<AppState>) -> impl IntoResponse {
-    info!("POST /start received");
+#[derive(Deserialize, Debug, Default)]
+#[serde(default)]
+struct StartReq {
+    #[serde(rename = "totalNodes")]
+    total_nodes: Option<u32>,
+    #[serde(rename = "mobileNodes")]
+    mobile_nodes: Option<u32>,
+    #[serde(rename = "topoChangeMs")]
+    topo_change_ms: Option<u32>,
+    #[serde(rename = "reconfigMode")]
+    reconfig_mode: Option<String>,
+    #[serde(rename = "queryMode")]
+    query_mode: Option<String>,
+}
+
+fn render_toml(template: &str, folder: &Path, req: &StartReq) -> Result<String, String> {
+    let total = req.total_nodes.ok_or("missing totalNodes")?;
+    let mobile = req.mobile_nodes.ok_or("missing mobileNodes")?;
+    let topo_ms = req.topo_change_ms.ok_or("missing topoChangeMs")?;
+    let reconfig = req.reconfig_mode.as_deref().ok_or("missing reconfigMode")?;
+
+    // topoChangeMs -> speedup_factor (500->0.5, 1000->1, 2000->2, 4000->4)
+    let speedup = (topo_ms as f64) / 1000.0;
+
+    // reconfigMode -> two booleans
+    let (enable_reconfig, enable_proactive) = match reconfig {
+        "holistic" => (true, false),
+        "incremental" => (false, true),
+        other => return Err(format!("unknown reconfigMode: {}", other)),
+    };
+
+    let folder_abs = folder
+        .canonicalize()
+        .map_err(|e| format!("canonicalize {}: {}", folder.display(), e))?;
+    let folder_str = folder_abs
+        .to_str()
+        .ok_or("folder path is not valid UTF-8")?;
+
+    let source_groups = format!("{}/source_groups.json", folder_str);
+    let fixed_topology = format!("{}/fixed_topology.json", folder_str);
+
+    let mut out = template.to_string();
+
+    let mut sub = |pattern: &str, replacement: &str| -> Result<(), String> {
+        let re = regex::Regex::new(pattern).map_err(|e| format!("regex: {}", e))?;
+        if !re.is_match(&out) {
+            return Err(format!("pattern not found in TOML: {}", pattern));
+        }
+        out = re.replace(&out, replacement).into_owned();
+        Ok(())
+    };
+
+    sub(
+        r"(?m)^enable_query_reconfiguration\s*=\s*\[[^\]]*\]",
+        &format!("enable_query_reconfiguration = [{}]", enable_reconfig),
+    )?;
+    sub(
+        r"(?m)^enable_proactive_deployment\s*=\s*\[[^\]]*\]",
+        &format!("enable_proactive_deployment = [{}]", enable_proactive),
+    )?;
+    sub(
+        r"(?m)^speedup_factor\s*=\s*\[[^\]]*\]",
+        &format!("speedup_factor = [{}]", speedup),
+    )?;
+    sub(
+        r"(?m)^placementAmendmentThreadCount\s*=\s*\[[^\]]*\]",
+        "placementAmendmentThreadCount = [8]",
+    )?;
+    sub(
+        r#"(?m)^(\s*)place_default_sources_on_node_ids_path\s*=\s*"[^"]*""#,
+        &format!(
+            r#"${{1}}place_default_sources_on_node_ids_path = "{}""#,
+            source_groups
+        ),
+    )?;
+    sub(
+        r#"(?m)^(\s*)fixed_topology_nodes\s*=\s*"[^"]*""#,
+        &format!(r#"${{1}}fixed_topology_nodes = "{}""#, fixed_topology),
+    )?;
+    sub(
+        r#"(?m)^(\s*)TrajectoriesDir\s*=\s*"[^"]*""#,
+        &format!(r#"${{1}}TrajectoriesDir = "{}""#, folder_str),
+    )?;
+
+    info!(
+        "rendered TOML: totalNodes={} mobileNodes={} speedup_factor={} enable_query_reconfiguration={} enable_proactive_deployment={} folder={}",
+        total, mobile, speedup, enable_reconfig, enable_proactive, folder_str
+    );
+
+    Ok(out)
+}
+
+async fn start_handler(
+    State(state): State<AppState>,
+    Json(req): Json<StartReq>,
+) -> impl IntoResponse {
+    info!("POST /start received: {:?}", req);
     let mut guard = state.child.lock().unwrap();
 
     // Check if already running
@@ -64,10 +163,6 @@ async fn start_handler(State(state): State<AppState>) -> impl IntoResponse {
         Ok(v) => v,
         Err((status, msg)) => { error!("SIM_BIN not set"); return (status, msg).into_response(); },
     };
-    let sim_type = match env_required("SIM_TYPE") {
-        Ok(v) => v,
-        Err((status, msg)) => { error!("SIM_TYPE not set"); return (status, msg).into_response(); },
-    };
     let sim_nes_dir = match env_required("SIM_NES_DIR") {
         Ok(v) => v,
         Err((status, msg)) => { error!("SIM_NES_DIR not set"); return (status, msg).into_response(); },
@@ -91,8 +186,121 @@ async fn start_handler(State(state): State<AppState>) -> impl IntoResponse {
 
     let live_port = std::env::var("LIVE_LATENCY_PORT").unwrap_or_else(|_| "9001".to_string());
 
+    let sim_type = match req.query_mode.as_deref() {
+        Some("stateful") => "STATEFUL".to_string(),
+        Some("stateless") => "STATELESS".to_string(),
+        Some(other) => {
+            error!("unknown queryMode: {}", other);
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"ok": false, "error": format!("unknown queryMode: {}", other)})),
+            )
+                .into_response();
+        }
+        None => std::env::var("SIM_TYPE").unwrap_or_else(|_| "STATEFUL".to_string()),
+    };
+
+    // experiment_input root = parent of SIM_TOML's directory
+    // (SIM_TOML lives at .../experiment_input/<config_folder>/<template>.toml)
+    let template_path = PathBuf::from(&sim_toml);
+    let exp_root = template_path
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf());
+    let exp_root = match exp_root {
+        Some(p) => p,
+        None => {
+            error!("cannot derive experiment_input root from SIM_TOML={}", sim_toml);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": "cannot derive experiment_input root from SIM_TOML"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Resolve configuration folder under variable_reconnect_speeds/
+    let total = match req.total_nodes {
+        Some(v) => v,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"ok": false, "error": "missing totalNodes"})),
+            )
+                .into_response();
+        }
+    };
+    let mobile = match req.mobile_nodes {
+        Some(v) => v,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"ok": false, "error": "missing mobileNodes"})),
+            )
+                .into_response();
+        }
+    };
+    let folder_name = format!(
+        "synthetic_{}_src_{}_change_per_query_sec_120_runtime_varspeed_freq",
+        total, mobile
+    );
+    let folder = exp_root.join("variable_reconnect_speeds").join(&folder_name);
+    if !folder.is_dir() {
+        warn!("configuration folder not found: {}", folder.display());
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("configuration not found: {}", folder.display())
+            })),
+        )
+            .into_response();
+    }
+
+    // Render the template TOML against the request
+    let template = match std::fs::read_to_string(&sim_toml) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("failed to read SIM_TOML {}: {}", sim_toml, e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("read SIM_TOML: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+    let rendered = match render_toml(&template, &folder, &req) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("render_toml failed: {}", e);
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"ok": false, "error": format!("render TOML: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let rendered_path = format!("/tmp/sim_rendered_{}.toml", ts);
+    if let Err(e) = std::fs::write(&rendered_path, &rendered) {
+        error!("failed to write rendered TOML {}: {}", rendered_path, e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": format!("write rendered TOML: {}", e)})),
+        )
+            .into_response();
+    }
+    info!(
+        "rendered TOML written to {}:\n----- BEGIN RENDERED TOML -----\n{}\n----- END RENDERED TOML -----",
+        rendered_path, rendered
+    );
+
     info!("spawning simulator: bin={} type={} nes_dir={} toml={} output={} tcp_input={} runs={} live_port={}",
-        sim_bin, sim_type, sim_nes_dir, sim_toml, sim_output_dir, sim_tcp_input_bin, sim_runs, live_port);
+        sim_bin, sim_type, sim_nes_dir, rendered_path, sim_output_dir, sim_tcp_input_bin, sim_runs, live_port);
 
     if let Err(e) = std::fs::create_dir_all(&sim_output_dir) {
         error!("failed to create output dir {}: {}", sim_output_dir, e);
@@ -133,7 +341,7 @@ async fn start_handler(State(state): State<AppState>) -> impl IntoResponse {
         .args([
             &sim_type,
             &sim_nes_dir,
-            &sim_toml,
+            &rendered_path,
             &sim_output_dir,
             &sim_tcp_input_bin,
             &sim_runs,
@@ -326,7 +534,46 @@ async fn deployment_handler() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    // Layered subscriber: stdout (always) + optional file at $SIM_OUTPUT_DIR/daemon.log.
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let stdout_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stdout);
+
+    let file_guard = match std::env::var("SIM_OUTPUT_DIR") {
+        Ok(dir) => match std::fs::create_dir_all(&dir) {
+            Ok(()) => {
+                let appender = tracing_appender::rolling::never(&dir, "daemon.log");
+                let (non_blocking, guard) = tracing_appender::non_blocking(appender);
+                let file_layer = tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_ansi(false);
+                tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(stdout_layer)
+                    .with(file_layer)
+                    .init();
+                info!("daemon log file: {}/daemon.log", dir);
+                Some(guard)
+            }
+            Err(e) => {
+                tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(stdout_layer)
+                    .init();
+                warn!("could not create SIM_OUTPUT_DIR={}: {} (stdout-only logging)", dir, e);
+                None
+            }
+        },
+        Err(_) => {
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(stdout_layer)
+                .init();
+            warn!("SIM_OUTPUT_DIR not set at daemon startup (stdout-only logging)");
+            None
+        }
+    };
+    // Keep the appender guard alive for the lifetime of main so writes flush on exit.
+    let _file_guard = file_guard;
 
     let port: u16 = std::env::var("DAEMON_PORT")
         .ok()
