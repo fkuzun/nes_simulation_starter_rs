@@ -73,15 +73,14 @@ fn render_toml(template: &str, folder: &Path, req: &StartReq) -> Result<String, 
         other => return Err(format!("unknown reconfigMode: {}", other)),
     };
 
-    let folder_abs = folder
-        .canonicalize()
-        .map_err(|e| format!("canonicalize {}: {}", folder.display(), e))?;
-    let folder_str = folder_abs
-        .to_str()
-        .ok_or("folder path is not valid UTF-8")?;
-
-    let source_groups = format!("{}/source_groups.json", folder_str);
-    let fixed_topology = format!("{}/fixed_topology.json", folder_str);
+    // Paths in the rendered TOML must be RELATIVE to the rendered TOML's parent
+    // directory (see simulator::config::deserialize_relative_path and
+    // SimulationConfig::read_multi_simulation_input_config, which sets base_path
+    // to the parent of the input config file). The daemon writes the rendered
+    // TOML inside `folder`, so the data files sit alongside it.
+    let source_groups = "source_groups.json";
+    let fixed_topology = "fixed_topology.json";
+    let trajectories_dir = ".";
 
     let mut out = template.to_string();
 
@@ -123,12 +122,12 @@ fn render_toml(template: &str, folder: &Path, req: &StartReq) -> Result<String, 
     )?;
     sub(
         r#"(?m)^(\s*)TrajectoriesDir\s*=\s*"[^"]*""#,
-        &format!(r#"${{1}}TrajectoriesDir = "{}""#, folder_str),
+        &format!(r#"${{1}}TrajectoriesDir = "{}""#, trajectories_dir),
     )?;
 
     info!(
         "rendered TOML: totalNodes={} mobileNodes={} speedup_factor={} enable_query_reconfiguration={} enable_proactive_deployment={} folder={}",
-        total, mobile, speedup, enable_reconfig, enable_proactive, folder_str
+        total, mobile, speedup, enable_reconfig, enable_proactive, folder.display()
     );
 
     Ok(out)
@@ -279,7 +278,10 @@ async fn start_handler(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    let rendered_path = format!("/tmp/sim_rendered_{}.toml", ts);
+    // Write rendered TOML inside `folder` so the simulator's base_path
+    // (parent of input config) resolves data files like fixed_topology.json
+    // and source_groups.json alongside it.
+    let rendered_path = format!("{}/sim_rendered_{}.toml", folder.display(), ts);
     if let Err(e) = std::fs::write(&rendered_path, &rendered) {
         error!("failed to write rendered TOML {}: {}", rendered_path, e);
         return (
