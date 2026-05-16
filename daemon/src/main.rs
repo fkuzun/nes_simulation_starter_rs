@@ -73,12 +73,23 @@ fn render_toml(template: &str, folder: &Path, req: &StartReq) -> Result<String, 
         other => return Err(format!("unknown reconfigMode: {}", other)),
     };
 
-    // Paths in the rendered TOML must be RELATIVE to the rendered TOML's parent
-    // directory (see simulator::config::deserialize_relative_path and
-    // SimulationConfig::read_multi_simulation_input_config, which sets base_path
-    // to the parent of the input config file). The daemon writes the rendered
-    // TOML inside `folder`, so the data files sit alongside it.
-    let source_groups = "source_groups.json";
+    // The simulator handles these three fields with two different mechanisms:
+    //   - `fixed_topology_nodes` and `TrajectoriesDir` deserialize as
+    //     RelativePathBuf and are joined against `base_path` (set to the parent
+    //     of the input config file). They MUST be relative.
+    //   - `place_default_sources_on_node_ids_path` deserializes as a plain
+    //     PathBuf and is read directly (simulator/src/query.rs:13), with no
+    //     base_path resolution. It MUST be absolute (or relative to the
+    //     simulator's cwd, which we don't control).
+    // We write the rendered TOML inside `folder`, so the relative names below
+    // refer to files sitting next to it.
+    let folder_abs = folder
+        .canonicalize()
+        .map_err(|e| format!("canonicalize {}: {}", folder.display(), e))?;
+    let folder_str = folder_abs
+        .to_str()
+        .ok_or("folder path is not valid UTF-8")?;
+    let source_groups = format!("{}/source_groups.json", folder_str);
     let fixed_topology = "fixed_topology.json";
     let trajectories_dir = ".";
 
