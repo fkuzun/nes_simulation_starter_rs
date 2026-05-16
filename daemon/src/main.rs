@@ -200,20 +200,16 @@ async fn start_handler(
         None => std::env::var("SIM_TYPE").unwrap_or_else(|_| "STATEFUL".to_string()),
     };
 
-    // experiment_input root = parent of SIM_TOML's directory
-    // (SIM_TOML lives at .../experiment_input/<config_folder>/<template>.toml)
+    // Config tree root = directory holding the generic SIM_TOML.
+    // (Name-agnostic: works whether the tree is experiment_input/ or experiment_input_new/.)
     let template_path = PathBuf::from(&sim_toml);
-    let exp_root = template_path
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.to_path_buf());
-    let exp_root = match exp_root {
+    let exp_root = match template_path.parent().map(|p| p.to_path_buf()) {
         Some(p) => p,
         None => {
-            error!("cannot derive experiment_input root from SIM_TOML={}", sim_toml);
+            error!("cannot derive config tree root from SIM_TOML={}", sim_toml);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"ok": false, "error": "cannot derive experiment_input root from SIM_TOML"})),
+                Json(serde_json::json!({"ok": false, "error": "cannot derive config tree root from SIM_TOML"})),
             )
                 .into_response();
         }
@@ -240,11 +236,9 @@ async fn start_handler(
                 .into_response();
         }
     };
-    let folder_name = format!(
-        "synthetic_{}_src_{}_change_per_query_sec_120_runtime_varspeed_freq",
-        total, mobile
-    );
-    let folder = exp_root.join("variable_reconnect_speeds").join(&folder_name);
+    // Layout: <exp_root>/<totalNodes>/<mobileNodes>_<totalNodes>/
+    let inner = format!("{}_{}", mobile, total);
+    let folder = exp_root.join(total.to_string()).join(&inner);
     if !folder.is_dir() {
         warn!("configuration folder not found: {}", folder.display());
         return (
