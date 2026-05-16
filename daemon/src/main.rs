@@ -68,8 +68,8 @@ fn render_toml(template: &str, folder: &Path, req: &StartReq) -> Result<String, 
 
     // reconfigMode -> two booleans
     let (enable_reconfig, enable_proactive) = match reconfig {
-        "holistic" => (true, false),
-        "incremental" => (false, true),
+        "holistic" => (false, false),
+        "incremental" => (true, true),
         other => return Err(format!("unknown reconfigMode: {}", other)),
     };
 
