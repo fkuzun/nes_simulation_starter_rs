@@ -6,8 +6,9 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
@@ -19,7 +20,7 @@ const KILL_CHAIN: &str = r#"ps -ef | grep 'nesCoordinator' | grep -v grep | awk 
 
 #[derive(Clone)]
 struct AppState {
-    child: Arc<Mutex<Option<Child>>>,
+    remote_pid: Arc<Mutex<Option<u32>>>,
 }
 
 #[derive(Serialize)]
@@ -42,6 +43,60 @@ fn env_required(name: &str) -> Result<String, (StatusCode, String)> {
     })
 }
 
+fn sh_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for ch in s.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+fn ssh_run(host: &str, script: &str) -> Result<Output, String> {
+    let mut child = Command::new("ssh")
+        .args([
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            host,
+            "bash",
+            "-l",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("ssh spawn failed: {}", e))?;
+
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| "ssh stdin not available".to_string())?;
+        stdin
+            .write_all(script.as_bytes())
+            .map_err(|e| format!("ssh stdin write failed: {}", e))?;
+    }
+    drop(child.stdin.take());
+
+    child
+        .wait_with_output()
+        .map_err(|e| format!("ssh wait failed: {}", e))
+}
+
+fn ssh_remote_running(host: &str, pid: u32) -> bool {
+    match ssh_run(host, &format!("kill -0 {} 2>/dev/null", pid)) {
+        Ok(out) => out.status.success(),
+        Err(_) => false,
+    }
+}
+
 #[derive(Deserialize, Debug, Default)]
 #[serde(default)]
 struct StartReq {
@@ -57,36 +112,24 @@ struct StartReq {
     query_mode: Option<String>,
 }
 
-fn render_toml(template: &str, folder: &Path, req: &StartReq) -> Result<String, String> {
+fn render_toml(template: &str, folder: &PathBuf, req: &StartReq) -> Result<String, String> {
     let total = req.total_nodes.ok_or("missing totalNodes")?;
     let mobile = req.mobile_nodes.ok_or("missing mobileNodes")?;
     let topo_ms = req.topo_change_ms.ok_or("missing topoChangeMs")?;
     let reconfig = req.reconfig_mode.as_deref().ok_or("missing reconfigMode")?;
 
-    // topoChangeMs -> speedup_factor (500->0.5, 1000->1, 2000->2, 4000->4)
     let speedup = (topo_ms as f64) / 1000.0;
 
-    // reconfigMode -> two booleans
     let (enable_reconfig, enable_proactive) = match reconfig {
         "holistic" => (false, false),
         "incremental" => (true, true),
         other => return Err(format!("unknown reconfigMode: {}", other)),
     };
 
-    // The simulator handles these three fields with two different mechanisms:
-    //   - `fixed_topology_nodes` and `TrajectoriesDir` deserialize as
-    //     RelativePathBuf and are joined against `base_path` (set to the parent
-    //     of the input config file). They MUST be relative.
-    //   - `place_default_sources_on_node_ids_path` deserializes as a plain
-    //     PathBuf and is read directly (simulator/src/query.rs:13), with no
-    //     base_path resolution. It MUST be absolute (or relative to the
-    //     simulator's cwd, which we don't control).
-    // We write the rendered TOML inside `folder`, so the relative names below
-    // refer to files sitting next to it.
-    let folder_abs = folder
-        .canonicalize()
-        .map_err(|e| format!("canonicalize {}: {}", folder.display(), e))?;
-    let folder_str = folder_abs
+    // `folder` is the absolute remote path on fat2 (built from SIM_TOML's
+    // parent + totalNodes/mobile_total). We can't canonicalize here because
+    // the filesystem is on a different host; the absolute join is sufficient.
+    let folder_str = folder
         .to_str()
         .ok_or("folder path is not valid UTF-8")?;
     let source_groups = format!("{}/source_groups.json", folder_str);
@@ -149,49 +192,58 @@ async fn start_handler(
     Json(req): Json<StartReq>,
 ) -> impl IntoResponse {
     info!("POST /start received: {:?}", req);
-    let mut guard = state.child.lock().unwrap();
 
-    // Check if already running
-    if let Some(ref mut child) = *guard {
-        match child.try_wait() {
-            Ok(None) => {
-                warn!("POST /start rejected: simulator already running (pid={})", child.id());
-                return (
-                    StatusCode::CONFLICT,
-                    Json(serde_json::json!({"ok": false, "error": "simulator already running", "pid": child.id()})),
-                )
-                    .into_response();
-            }
-            _ => {
-                info!("clearing stale child handle (process already exited)");
-                *guard = None;
-            }
+    let host = match env_required("REMOTE_HOST") {
+        Ok(v) => v,
+        Err((s, m)) => {
+            error!("REMOTE_HOST not set");
+            return (s, m).into_response();
+        }
+    };
+
+    let mut guard = state.remote_pid.lock().unwrap();
+
+    if let Some(pid) = *guard {
+        if ssh_remote_running(&host, pid) {
+            warn!("POST /start rejected: simulator already running (pid={})", pid);
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": "simulator already running",
+                    "pid": pid
+                })),
+            )
+                .into_response();
+        } else {
+            info!("clearing stale remote pid (pid={} no longer running)", pid);
+            *guard = None;
         }
     }
 
     let sim_bin = match env_required("SIM_BIN") {
         Ok(v) => v,
-        Err((status, msg)) => { error!("SIM_BIN not set"); return (status, msg).into_response(); },
+        Err((s, m)) => { error!("SIM_BIN not set"); return (s, m).into_response(); }
     };
     let sim_nes_dir = match env_required("SIM_NES_DIR") {
         Ok(v) => v,
-        Err((status, msg)) => { error!("SIM_NES_DIR not set"); return (status, msg).into_response(); },
+        Err((s, m)) => { error!("SIM_NES_DIR not set"); return (s, m).into_response(); }
     };
     let sim_toml = match env_required("SIM_TOML") {
         Ok(v) => v,
-        Err((status, msg)) => { error!("SIM_TOML not set"); return (status, msg).into_response(); },
+        Err((s, m)) => { error!("SIM_TOML not set"); return (s, m).into_response(); }
     };
     let sim_output_dir = match env_required("SIM_OUTPUT_DIR") {
         Ok(v) => v,
-        Err((status, msg)) => { error!("SIM_OUTPUT_DIR not set"); return (status, msg).into_response(); },
+        Err((s, m)) => { error!("SIM_OUTPUT_DIR not set"); return (s, m).into_response(); }
     };
     let sim_tcp_input_bin = match env_required("SIM_TCP_INPUT_BIN") {
         Ok(v) => v,
-        Err((status, msg)) => { error!("SIM_TCP_INPUT_BIN not set"); return (status, msg).into_response(); },
+        Err((s, m)) => { error!("SIM_TCP_INPUT_BIN not set"); return (s, m).into_response(); }
     };
     let sim_runs = match env_required("SIM_RUNS") {
         Ok(v) => v,
-        Err((status, msg)) => { error!("SIM_RUNS not set"); return (status, msg).into_response(); },
+        Err((s, m)) => { error!("SIM_RUNS not set"); return (s, m).into_response(); }
     };
 
     let live_port = std::env::var("LIVE_LATENCY_PORT").unwrap_or_else(|_| "9001".to_string());
@@ -210,8 +262,6 @@ async fn start_handler(
         None => std::env::var("SIM_TYPE").unwrap_or_else(|_| "STATEFUL".to_string()),
     };
 
-    // Config tree root = directory holding the generic SIM_TOML.
-    // (Name-agnostic: works whether the tree is experiment_input/ or experiment_input_new/.)
     let template_path = PathBuf::from(&sim_toml);
     let exp_root = match template_path.parent().map(|p| p.to_path_buf()) {
         Some(p) => p,
@@ -225,7 +275,6 @@ async fn start_handler(
         }
     };
 
-    // Resolve configuration folder under variable_reconnect_speeds/
     let total = match req.total_nodes {
         Some(v) => v,
         None => {
@@ -246,33 +295,71 @@ async fn start_handler(
                 .into_response();
         }
     };
-    // Layout: <exp_root>/<totalNodes>/<mobileNodes>_<totalNodes>/
     let inner = format!("{}_{}", mobile, total);
     let folder = exp_root.join(total.to_string()).join(&inner);
-    if !folder.is_dir() {
-        warn!("configuration folder not found: {}", folder.display());
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({
-                "ok": false,
-                "error": format!("configuration not found: {}", folder.display())
-            })),
-        )
-            .into_response();
-    }
-
-    // Render the template TOML against the request
-    let template = match std::fs::read_to_string(&sim_toml) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("failed to read SIM_TOML {}: {}", sim_toml, e);
+    let folder_str = match folder.to_str() {
+        Some(s) => s.to_string(),
+        None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"ok": false, "error": format!("read SIM_TOML: {}", e)})),
+                Json(serde_json::json!({"ok": false, "error": "folder path is not valid UTF-8"})),
             )
                 .into_response();
         }
     };
+
+    // Pre-flight: configuration folder must exist on fat2.
+    match ssh_run(&host, &format!("test -d {}", sh_quote(&folder_str))) {
+        Ok(out) if out.status.success() => {}
+        Ok(_) => {
+            warn!("remote folder not found: {}:{}", host, folder_str);
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": format!("configuration not found on {}: {}", host, folder_str)
+                })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            error!("ssh test -d failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("ssh test failed: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Fetch the template TOML from fat2.
+    let template = match ssh_run(&host, &format!("cat {}", sh_quote(&sim_toml))) {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).into_owned(),
+        Ok(out) => {
+            error!(
+                "remote cat {} failed: {}",
+                sim_toml,
+                String::from_utf8_lossy(&out.stderr)
+            );
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": format!("read SIM_TOML on {}: {}", host, String::from_utf8_lossy(&out.stderr))
+                })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            error!("ssh cat SIM_TOML failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("ssh cat failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
     let rendered = match render_toml(&template, &folder, &req) {
         Ok(s) => s,
         Err(e) => {
@@ -289,90 +376,138 @@ async fn start_handler(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    // Write rendered TOML inside `folder` so the simulator's base_path
-    // (parent of input config) resolves data files like fixed_topology.json
-    // and source_groups.json alongside it.
     let rendered_path = format!("{}/sim_rendered_{}.toml", folder.display(), ts);
-    if let Err(e) = std::fs::write(&rendered_path, &rendered) {
-        error!("failed to write rendered TOML {}: {}", rendered_path, e);
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"ok": false, "error": format!("write rendered TOML: {}", e)})),
-        )
-            .into_response();
+
+    // Upload rendered TOML to fat2 via single-quoted heredoc (no expansion).
+    let upload_script = format!(
+        "set -e\ncat > {} <<'__SIM_TOML_EOF__'\n{}\n__SIM_TOML_EOF__\n",
+        sh_quote(&rendered_path),
+        rendered
+    );
+    match ssh_run(&host, &upload_script) {
+        Ok(out) if out.status.success() => {
+            info!("rendered TOML uploaded to {}:{}", host, rendered_path);
+        }
+        Ok(out) => {
+            error!(
+                "remote upload of rendered TOML failed: status={} stderr={}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr)
+            );
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": format!("upload rendered TOML: {}", String::from_utf8_lossy(&out.stderr))
+                })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            error!("ssh upload TOML failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("ssh upload failed: {}", e)})),
+            )
+                .into_response();
+        }
     }
+
     info!(
-        "rendered TOML written to {}:\n----- BEGIN RENDERED TOML -----\n{}\n----- END RENDERED TOML -----",
-        rendered_path, rendered
+        "spawning simulator on {} via SSH: bin={} type={} nes_dir={} toml={} output={} tcp_input={} runs={} live_port={}",
+        host, sim_bin, sim_type, sim_nes_dir, rendered_path, sim_output_dir, sim_tcp_input_bin, sim_runs, live_port
     );
 
-    info!("spawning simulator: bin={} type={} nes_dir={} toml={} output={} tcp_input={} runs={} live_port={}",
-        sim_bin, sim_type, sim_nes_dir, rendered_path, sim_output_dir, sim_tcp_input_bin, sim_runs, live_port);
+    // Spawn the simulator on fat2 with nohup and detach; capture the remote
+    // PID by echoing it on stdout.
+    let spawn_script = format!(
+        r#"set -e
+SIM_OUTPUT_DIR={output_dir}
+SIM_BIN={sim_bin}
+SIM_NES_DIR={sim_nes_dir}
+RENDERED={rendered}
+TCP_INPUT_BIN={tcp_input_bin}
+mkdir -p "$SIM_OUTPUT_DIR"
+cd "$(dirname "$SIM_BIN")"
+ulimit -n 1048576
+LIVE_LATENCY_PORT={live_port} \
+  nohup "$SIM_BIN" {sim_type} "$SIM_NES_DIR" "$RENDERED" "$SIM_OUTPUT_DIR" "$TCP_INPUT_BIN" {sim_runs} \
+  > "$SIM_OUTPUT_DIR/run.log" 2>&1 < /dev/null &
+PID=$!
+disown 2>/dev/null || true
+echo "$PID" > "$SIM_OUTPUT_DIR/run.pid"
+echo "$PID"
+"#,
+        output_dir = sh_quote(&sim_output_dir),
+        sim_bin = sh_quote(&sim_bin),
+        sim_nes_dir = sh_quote(&sim_nes_dir),
+        rendered = sh_quote(&rendered_path),
+        tcp_input_bin = sh_quote(&sim_tcp_input_bin),
+        live_port = sh_quote(&live_port),
+        sim_type = sh_quote(&sim_type),
+        sim_runs = sh_quote(&sim_runs),
+    );
 
-    if let Err(e) = std::fs::create_dir_all(&sim_output_dir) {
-        error!("failed to create output dir {}: {}", sim_output_dir, e);
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"ok": false, "error": format!("mkdir {} failed: {}", sim_output_dir, e)})),
-        )
-            .into_response();
-    }
-
-    let run_log_path = format!("{}/run.log", sim_output_dir);
-    let run_pid_path = format!("{}/run.pid", sim_output_dir);
-
-    let run_log = match std::fs::File::create(&run_log_path) {
-        Ok(f) => f,
-        Err(e) => {
-            error!("failed to create {}: {}", run_log_path, e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"ok": false, "error": format!("create {} failed: {}", run_log_path, e)})),
-            )
-                .into_response();
+    match ssh_run(&host, &spawn_script) {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let pid_str = stdout.lines().last().unwrap_or("").trim();
+            match pid_str.parse::<u32>() {
+                Ok(pid) => {
+                    info!(
+                        "simulator spawned on {}, pid={} (log={}:{}/run.log)",
+                        host, pid, host, sim_output_dir
+                    );
+                    *guard = Some(pid);
+                    (
+                        StatusCode::OK,
+                        Json(serde_json::json!({
+                            "ok": true,
+                            "pid": pid,
+                            "host": host,
+                            "log": format!("{}:{}/run.log", host, sim_output_dir),
+                            "pid_file": format!("{}:{}/run.pid", host, sim_output_dir)
+                        })),
+                    )
+                        .into_response()
+                }
+                Err(e) => {
+                    error!(
+                        "could not parse PID from remote spawn output: err={} stdout={:?}",
+                        e, stdout
+                    );
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "ok": false,
+                            "error": format!("parse remote pid: {}", e),
+                            "stdout": stdout,
+                        })),
+                    )
+                        .into_response()
+                }
+            }
         }
-    };
-    let run_log_err = match run_log.try_clone() {
-        Ok(f) => f,
-        Err(e) => {
-            error!("failed to clone {} fd: {}", run_log_path, e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"ok": false, "error": format!("clone fd failed: {}", e)})),
-            )
-                .into_response();
-        }
-    };
-
-    let child_result = Command::new(&sim_bin)
-        .args([
-            &sim_type,
-            &sim_nes_dir,
-            &rendered_path,
-            &sim_output_dir,
-            &sim_tcp_input_bin,
-            &sim_runs,
-        ])
-        .env("LIVE_LATENCY_PORT", &live_port)
-        .stdout(Stdio::from(run_log))
-        .stderr(Stdio::from(run_log_err))
-        .spawn();
-
-    match child_result {
-        Ok(child) => {
-            let pid = child.id();
-            info!("simulator spawned successfully, pid={} (log={} pid_file={})", pid, run_log_path, run_pid_path);
-
-            let _ = std::fs::write(&run_pid_path, pid.to_string());
-
-            *guard = Some(child);
-            (StatusCode::OK, Json(serde_json::json!({"ok": true, "pid": pid, "log": run_log_path, "pid_file": run_pid_path}))).into_response()
-        }
-        Err(e) => {
-            error!("failed to spawn simulator: {} (bin={})", e, sim_bin);
+        Ok(out) => {
+            error!(
+                "remote spawn failed: status={} stderr={}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr)
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"ok": false, "error": format!("spawn failed: {}", e)})),
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": format!("remote spawn failed: {}", String::from_utf8_lossy(&out.stderr))
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            error!("ssh spawn invocation failed: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("ssh invocation failed: {}", e)})),
             )
                 .into_response()
         }
@@ -381,55 +516,60 @@ async fn start_handler(
 
 async fn stop_handler(State(state): State<AppState>) -> impl IntoResponse {
     info!("POST /stop received");
-    let mut guard = state.child.lock().unwrap();
 
-    if let Some(ref mut child) = *guard {
-        let pid = child.id();
-        info!("sending SIGINT to simulator pid={}", pid);
+    let host = match env_required("REMOTE_HOST") {
+        Ok(v) => v,
+        Err((s, m)) => {
+            error!("REMOTE_HOST not set");
+            return (s, m).into_response();
+        }
+    };
 
-        unsafe {
-            libc::kill(pid as i32, libc::SIGINT);
+    let mut guard = state.remote_pid.lock().unwrap();
+
+    if let Some(pid) = *guard {
+        info!("sending SIGINT to remote simulator pid={} on {}", pid, host);
+        if let Err(e) = ssh_run(&host, &format!("kill -INT {} 2>/dev/null || true", pid)) {
+            warn!("ssh kill -INT failed (best-effort): {}", e);
         }
 
-        // Wait up to 5 seconds for exit
         let mut exited = false;
         for i in 0..50 {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    info!("simulator exited after SIGINT (status={}, waited ~{}ms)", status, i * 100);
-                    exited = true;
-                    break;
-                }
-                Ok(None) => {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                Err(e) => {
-                    warn!("try_wait error: {}", e);
-                    exited = true;
-                    break;
-                }
+            std::thread::sleep(Duration::from_millis(100));
+            if !ssh_remote_running(&host, pid) {
+                info!(
+                    "remote simulator exited after SIGINT (~{}ms)",
+                    (i + 1) * 100
+                );
+                exited = true;
+                break;
             }
         }
 
         if !exited {
-            warn!("simulator pid={} did not exit after 5s SIGINT, sending SIGKILL", pid);
-            let _ = child.kill();
-            let _ = child.wait();
-            info!("simulator killed with SIGKILL");
+            warn!(
+                "remote simulator pid={} did not exit after 5s, sending SIGKILL",
+                pid
+            );
+            if let Err(e) = ssh_run(&host, &format!("kill -9 {} 2>/dev/null || true", pid)) {
+                warn!("ssh kill -9 failed: {}", e);
+            }
         }
     } else {
-        info!("POST /stop: no running simulator to stop");
+        info!("POST /stop: no recorded remote simulator pid");
     }
 
     *guard = None;
+
     if let Ok(dir) = std::env::var("SIM_OUTPUT_DIR") {
-        let _ = std::fs::remove_file(format!("{}/run.pid", dir));
+        let pid_file = format!("{}/run.pid", dir);
+        let _ = ssh_run(&host, &format!("rm -f {}", sh_quote(&pid_file)));
     }
 
-    info!("running kill chain for orphaned NES processes");
-    match Command::new("sh").arg("-c").arg(KILL_CHAIN).status() {
-        Ok(s) => info!("kill chain finished (status={})", s),
-        Err(e) => warn!("kill chain failed: {}", e),
+    info!("running remote kill chain for orphaned NES processes");
+    match ssh_run(&host, KILL_CHAIN) {
+        Ok(out) => info!("remote kill chain finished status={}", out.status),
+        Err(e) => warn!("remote kill chain failed: {}", e),
     }
 
     info!("POST /stop complete");
@@ -438,24 +578,31 @@ async fn stop_handler(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
     info!("GET /status received");
-    let mut guard = state.child.lock().unwrap();
 
-    let (running, pid) = if let Some(ref mut child) = *guard {
-        match child.try_wait() {
-            Ok(None) => (true, Some(child.id())),
-            Ok(Some(status)) => {
-                info!("GET /status: child already exited (status={}), clearing handle", status);
-                *guard = None;
-                (false, None)
-            }
-            Err(e) => {
-                warn!("GET /status: try_wait error: {}", e);
+    let host = match std::env::var("REMOTE_HOST") {
+        Ok(v) => v,
+        Err(_) => {
+            warn!("GET /status: REMOTE_HOST not set, reporting not running");
+            return Json(StatusResponse {
+                running: false,
+                pid: None,
+            });
+        }
+    };
+
+    let mut guard = state.remote_pid.lock().unwrap();
+
+    let (running, pid) = match *guard {
+        Some(pid) => {
+            if ssh_remote_running(&host, pid) {
+                (true, Some(pid))
+            } else {
+                info!("GET /status: remote pid={} no longer running, clearing", pid);
                 *guard = None;
                 (false, None)
             }
         }
-    } else {
-        (false, None)
+        None => (false, None),
     };
 
     info!("GET /status -> running={} pid={:?}", running, pid);
@@ -470,6 +617,10 @@ async fn healthz_handler() -> impl IntoResponse {
 async fn deployment_handler() -> impl IntoResponse {
     info!("GET /deployment received");
 
+    let host = match env_required("REMOTE_HOST") {
+        Ok(v) => v,
+        Err((s, m)) => return (s, m).into_response(),
+    };
     let sim_output_dir = match std::env::var("SIM_OUTPUT_DIR") {
         Ok(v) => v,
         Err(_) => {
@@ -482,13 +633,26 @@ async fn deployment_handler() -> impl IntoResponse {
     };
 
     let log_path = format!("{}/run.log", sim_output_dir);
-    let raw = match std::fs::read_to_string(&log_path) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!("GET /deployment: read {} failed: {}", log_path, e);
+    let raw = match ssh_run(&host, &format!("cat {}", sh_quote(&log_path))) {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).into_owned(),
+        Ok(out) => {
+            warn!(
+                "GET /deployment: remote cat {} failed: {}",
+                log_path,
+                String::from_utf8_lossy(&out.stderr)
+            );
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("read {}: {}", log_path, e)})),
+                Json(serde_json::json!({
+                    "error": format!("remote read {}: {}", log_path, String::from_utf8_lossy(&out.stderr))
+                })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("ssh cat failed: {}", e)})),
             )
                 .into_response();
         }
@@ -512,8 +676,8 @@ async fn deployment_handler() -> impl IntoResponse {
     let mut deployment_ns: u64 = 0;
     let mut count: u64 = 0;
     for cap in isqp_re.captures_iter(latest) {
-        request_ns    += cap[1].parse::<u64>().unwrap_or(0);
-        placement_ns  += cap[2].parse::<u64>().unwrap_or(0);
+        request_ns += cap[1].parse::<u64>().unwrap_or(0);
+        placement_ns += cap[2].parse::<u64>().unwrap_or(0);
         deployment_ns += cap[3].parse::<u64>().unwrap_or(0);
         count += 1;
     }
@@ -541,11 +705,10 @@ async fn deployment_handler() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    // Layered subscriber: stdout (always) + optional file at $SIM_OUTPUT_DIR/daemon.log.
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let stdout_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stdout);
 
-    let file_guard = match std::env::var("SIM_OUTPUT_DIR") {
+    let file_guard = match std::env::var("DAEMON_LOG_DIR") {
         Ok(dir) => match std::fs::create_dir_all(&dir) {
             Ok(()) => {
                 let appender = tracing_appender::rolling::never(&dir, "daemon.log");
@@ -566,7 +729,7 @@ async fn main() {
                     .with(env_filter)
                     .with(stdout_layer)
                     .init();
-                warn!("could not create SIM_OUTPUT_DIR={}: {} (stdout-only logging)", dir, e);
+                warn!("could not create DAEMON_LOG_DIR={}: {} (stdout-only logging)", dir, e);
                 None
             }
         },
@@ -575,11 +738,10 @@ async fn main() {
                 .with(env_filter)
                 .with(stdout_layer)
                 .init();
-            warn!("SIM_OUTPUT_DIR not set at daemon startup (stdout-only logging)");
+            warn!("DAEMON_LOG_DIR not set at daemon startup (stdout-only logging)");
             None
         }
     };
-    // Keep the appender guard alive for the lifetime of main so writes flush on exit.
     let _file_guard = file_guard;
 
     let port: u16 = std::env::var("DAEMON_PORT")
@@ -588,18 +750,21 @@ async fn main() {
         .unwrap_or(9000);
 
     info!("berlin-trams-daemon starting");
-    info!("  DAEMON_PORT = {}", port);
-    info!("  SIM_BIN = {:?}", std::env::var("SIM_BIN").ok());
-    info!("  SIM_TYPE = {:?}", std::env::var("SIM_TYPE").ok());
-    info!("  SIM_NES_DIR = {:?}", std::env::var("SIM_NES_DIR").ok());
-    info!("  SIM_TOML = {:?}", std::env::var("SIM_TOML").ok());
-    info!("  SIM_OUTPUT_DIR = {:?}", std::env::var("SIM_OUTPUT_DIR").ok());
+    info!("  DAEMON_PORT       = {}", port);
+    info!("  REMOTE_HOST       = {:?}", std::env::var("REMOTE_HOST").ok());
+    info!("  REMOTE_DIR        = {:?}", std::env::var("REMOTE_DIR").ok());
+    info!("  SIM_BIN           = {:?}", std::env::var("SIM_BIN").ok());
+    info!("  SIM_TYPE          = {:?}", std::env::var("SIM_TYPE").ok());
+    info!("  SIM_NES_DIR       = {:?}", std::env::var("SIM_NES_DIR").ok());
+    info!("  SIM_TOML          = {:?}", std::env::var("SIM_TOML").ok());
+    info!("  SIM_OUTPUT_DIR    = {:?}", std::env::var("SIM_OUTPUT_DIR").ok());
     info!("  SIM_TCP_INPUT_BIN = {:?}", std::env::var("SIM_TCP_INPUT_BIN").ok());
-    info!("  SIM_RUNS = {:?}", std::env::var("SIM_RUNS").ok());
+    info!("  SIM_RUNS          = {:?}", std::env::var("SIM_RUNS").ok());
     info!("  LIVE_LATENCY_PORT = {:?}", std::env::var("LIVE_LATENCY_PORT").ok());
+    info!("  DAEMON_LOG_DIR    = {:?}", std::env::var("DAEMON_LOG_DIR").ok());
 
     let state = AppState {
-        child: Arc::new(Mutex::new(None)),
+        remote_pid: Arc::new(Mutex::new(None)),
     };
 
     let app = Router::new()

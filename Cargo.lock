@@ -143,7 +143,6 @@ name = "berlin-trams-daemon"
 version = "0.1.0"
 dependencies = [
  "axum",
- "libc",
  "regex",
  "serde",
  "serde_json",
