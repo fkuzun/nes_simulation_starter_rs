@@ -429,7 +429,13 @@ RENDERED={rendered}
 TCP_INPUT_BIN={tcp_input_bin}
 mkdir -p "$SIM_OUTPUT_DIR"
 cd "$(dirname "$SIM_BIN")"
-ulimit -n 1048576
+# Raise nofile as high as the kernel/PAM allow. Non-interactive SSH sessions
+# often cap below 1048576, so fall through to lower values rather than
+# aborting via `set -e`.
+ulimit -n 1048576 2>/dev/null \
+  || ulimit -n 262144 2>/dev/null \
+  || ulimit -n 131072 2>/dev/null \
+  || echo "[remote-spawn] WARNING: could not raise nofile" >&2
 LIVE_LATENCY_PORT={live_port} \
   nohup "$SIM_BIN" {sim_type} "$SIM_NES_DIR" "$RENDERED" "$SIM_OUTPUT_DIR" "$TCP_INPUT_BIN" {sim_runs} \
   > "$SIM_OUTPUT_DIR/run.log" 2>&1 < /dev/null &
