@@ -876,6 +876,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "latency_service"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "simulation_runner_rs",
+ "tokio",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

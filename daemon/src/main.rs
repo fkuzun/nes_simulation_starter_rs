@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
@@ -20,7 +20,11 @@ const KILL_CHAIN: &str = r#"ps -ef | grep 'nesCoordinator' | grep -v grep | awk 
 
 #[derive(Clone)]
 struct AppState {
+    /// PID of the simulator process on the backend host (fat-2).
     remote_pid: Arc<Mutex<Option<u32>>>,
+    /// Local `latency_service` child process. Spawned on /start, killed on
+    /// /stop (and on the next /start, so each experiment gets a fresh sink).
+    latency_child: Arc<Mutex<Option<Child>>>,
 }
 
 #[derive(Serialize)]
@@ -95,6 +99,104 @@ fn ssh_remote_running(host: &str, pid: u32) -> bool {
         Ok(out) => out.status.success(),
         Err(_) => false,
     }
+}
+
+/// Send SIGINT to a local pid using /bin/kill so we don't drag in libc just
+/// for one syscall. Best-effort.
+fn local_sigint(pid: u32) {
+    let _ = Command::new("kill")
+        .args(["-INT", &pid.to_string()])
+        .status();
+}
+
+/// Stop the local `latency_service` child gracefully: SIGINT to let it flush
+/// the final bucket and emit EOF, wait up to 5 s, then SIGKILL if still
+/// alive. Always clears the slot.
+fn stop_latency_service(child_slot: &Arc<Mutex<Option<Child>>>) {
+    let mut guard = child_slot.lock().unwrap();
+    let Some(mut child) = guard.take() else {
+        return;
+    };
+
+    let pid = child.id();
+    info!("stopping latency_service (pid={})", pid);
+    local_sigint(pid);
+
+    for i in 0..50 {
+        std::thread::sleep(Duration::from_millis(100));
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                info!(
+                    "latency_service exited after SIGINT (status={}, waited ~{}ms)",
+                    status,
+                    (i + 1) * 100
+                );
+                return;
+            }
+            Ok(None) => continue,
+            Err(e) => {
+                warn!("latency_service try_wait error: {}", e);
+                break;
+            }
+        }
+    }
+
+    warn!(
+        "latency_service pid={} did not exit after 5s SIGINT, sending SIGKILL",
+        pid
+    );
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Spawn a fresh `latency_service` process on the daemon host (c10). The
+/// SIM_TYPE env var controls tuple parsing; LATENCY_SINK_PORT is where the
+/// simulator's forwarder on fat-2 will connect; LIVE_LATENCY_PORT is where
+/// the bridge subscribes.
+fn start_latency_service(
+    sim_type: &str,
+    sink_port: &str,
+    live_port: &str,
+) -> Result<Child, String> {
+    let bin = std::env::var("LATENCY_SERVICE_BIN")
+        .map_err(|_| "LATENCY_SERVICE_BIN not set".to_string())?;
+
+    let log_dir = std::env::var("DAEMON_LOG_DIR").ok();
+    let (stdout, stderr) = match log_dir {
+        Some(ref dir) => {
+            let _ = std::fs::create_dir_all(dir);
+            let path = format!("{}/latency_service.log", dir);
+            match std::fs::File::create(&path) {
+                Ok(f) => {
+                    let f2 = f.try_clone().map_err(|e| format!("clone fd: {}", e))?;
+                    info!("latency_service logging to {}", path);
+                    (Stdio::from(f), Stdio::from(f2))
+                }
+                Err(e) => {
+                    warn!(
+                        "could not open {}: {} (inheriting stdio)",
+                        path, e
+                    );
+                    (Stdio::inherit(), Stdio::inherit())
+                }
+            }
+        }
+        None => (Stdio::inherit(), Stdio::inherit()),
+    };
+
+    info!(
+        "spawning latency_service: bin={} SIM_TYPE={} LATENCY_SINK_PORT={} LIVE_LATENCY_PORT={}",
+        bin, sim_type, sink_port, live_port
+    );
+
+    Command::new(&bin)
+        .env("SIM_TYPE", sim_type)
+        .env("LATENCY_SINK_PORT", sink_port)
+        .env("LIVE_LATENCY_PORT", live_port)
+        .stdout(stdout)
+        .stderr(stderr)
+        .spawn()
+        .map_err(|e| format!("spawn {} failed: {}", bin, e))
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -247,6 +349,15 @@ async fn start_handler(
     };
 
     let live_port = std::env::var("LIVE_LATENCY_PORT").unwrap_or_else(|_| "9001".to_string());
+    let latency_sink_host = match env_required("LATENCY_SINK_HOST") {
+        Ok(v) => v,
+        Err((s, m)) => {
+            error!("LATENCY_SINK_HOST not set");
+            return (s, m).into_response();
+        }
+    };
+    let latency_sink_port =
+        std::env::var("LATENCY_SINK_PORT").unwrap_or_else(|_| "9501".to_string());
 
     let sim_type = match req.query_mode.as_deref() {
         Some("stateful") => "STATEFUL".to_string(),
@@ -413,9 +524,31 @@ async fn start_handler(
         }
     }
 
+    // Spawn the local `latency_service` first so its listener is up before
+    // the simulator's forwarder tries to dial it. Tear down any prior
+    // instance from a previous /start.
+    stop_latency_service(&state.latency_child);
+    match start_latency_service(&sim_type, &latency_sink_port, &live_port) {
+        Ok(child) => {
+            let mut lguard = state.latency_child.lock().unwrap();
+            *lguard = Some(child);
+        }
+        Err(e) => {
+            error!("could not start latency_service: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": format!("start latency_service: {}", e)
+                })),
+            )
+                .into_response();
+        }
+    }
+
     info!(
-        "spawning simulator on {} via SSH: bin={} type={} nes_dir={} toml={} output={} tcp_input={} runs={} live_port={}",
-        host, sim_bin, sim_type, sim_nes_dir, rendered_path, sim_output_dir, sim_tcp_input_bin, sim_runs, live_port
+        "spawning simulator on {} via SSH: bin={} type={} nes_dir={} toml={} output={} tcp_input={} runs={} latency_sink={}:{}",
+        host, sim_bin, sim_type, sim_nes_dir, rendered_path, sim_output_dir, sim_tcp_input_bin, sim_runs, latency_sink_host, latency_sink_port
     );
 
     // Spawn the simulator on fat2 with nohup and detach; capture the remote
@@ -436,7 +569,8 @@ ulimit -n 1048576 2>/dev/null \
   || ulimit -n 262144 2>/dev/null \
   || ulimit -n 131072 2>/dev/null \
   || echo "[remote-spawn] WARNING: could not raise nofile" >&2
-LIVE_LATENCY_PORT={live_port} \
+LATENCY_SINK_HOST={latency_sink_host} \
+LATENCY_SINK_PORT={latency_sink_port} \
   nohup "$SIM_BIN" {sim_type} "$SIM_NES_DIR" "$RENDERED" "$SIM_OUTPUT_DIR" "$TCP_INPUT_BIN" {sim_runs} \
   > "$SIM_OUTPUT_DIR/run.log" 2>&1 < /dev/null &
 PID=$!
@@ -449,7 +583,8 @@ echo "$PID"
         sim_nes_dir = sh_quote(&sim_nes_dir),
         rendered = sh_quote(&rendered_path),
         tcp_input_bin = sh_quote(&sim_tcp_input_bin),
-        live_port = sh_quote(&live_port),
+        latency_sink_host = sh_quote(&latency_sink_host),
+        latency_sink_port = sh_quote(&latency_sink_port),
         sim_type = sh_quote(&sim_type),
         sim_runs = sh_quote(&sim_runs),
     );
@@ -482,6 +617,7 @@ echo "$PID"
                         "could not parse PID from remote spawn output: err={} stdout={:?}",
                         e, stdout
                     );
+                    stop_latency_service(&state.latency_child);
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({
@@ -500,6 +636,7 @@ echo "$PID"
                 out.status,
                 String::from_utf8_lossy(&out.stderr)
             );
+            stop_latency_service(&state.latency_child);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
@@ -511,6 +648,7 @@ echo "$PID"
         }
         Err(e) => {
             error!("ssh spawn invocation failed: {}", e);
+            stop_latency_service(&state.latency_child);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"ok": false, "error": format!("ssh invocation failed: {}", e)})),
@@ -577,6 +715,10 @@ async fn stop_handler(State(state): State<AppState>) -> impl IntoResponse {
         Ok(out) => info!("remote kill chain finished status={}", out.status),
         Err(e) => warn!("remote kill chain failed: {}", e),
     }
+
+    // Tear down the local latency_service so the next /start gets a fresh
+    // sink state. SIGINT lets it flush the final bucket and emit EOF.
+    stop_latency_service(&state.latency_child);
 
     info!("POST /stop complete");
     Json(StopResponse { ok: true }).into_response()
@@ -766,11 +908,15 @@ async fn main() {
     info!("  SIM_OUTPUT_DIR    = {:?}", std::env::var("SIM_OUTPUT_DIR").ok());
     info!("  SIM_TCP_INPUT_BIN = {:?}", std::env::var("SIM_TCP_INPUT_BIN").ok());
     info!("  SIM_RUNS          = {:?}", std::env::var("SIM_RUNS").ok());
-    info!("  LIVE_LATENCY_PORT = {:?}", std::env::var("LIVE_LATENCY_PORT").ok());
-    info!("  DAEMON_LOG_DIR    = {:?}", std::env::var("DAEMON_LOG_DIR").ok());
+    info!("  LIVE_LATENCY_PORT   = {:?}", std::env::var("LIVE_LATENCY_PORT").ok());
+    info!("  LATENCY_SERVICE_BIN = {:?}", std::env::var("LATENCY_SERVICE_BIN").ok());
+    info!("  LATENCY_SINK_HOST   = {:?}", std::env::var("LATENCY_SINK_HOST").ok());
+    info!("  LATENCY_SINK_PORT   = {:?}", std::env::var("LATENCY_SINK_PORT").ok());
+    info!("  DAEMON_LOG_DIR      = {:?}", std::env::var("DAEMON_LOG_DIR").ok());
 
     let state = AppState {
         remote_pid: Arc::new(Mutex::new(None)),
+        latency_child: Arc::new(Mutex::new(None)),
     };
 
     let app = Router::new()

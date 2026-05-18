@@ -1,19 +1,18 @@
 use chrono::{DateTime, Local};
 use reqwest::Url;
-use simulation_runner_lib::live_latency::LiveLatencySink;
 use simulation_runner_lib::*;
+use std::env;
 use std::error::Error;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Write;
 use std::ops::Add;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-use std::env;
 use tokio::task;
 use tokio::time::timeout;
 
@@ -79,52 +78,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let live_port: u16 = env::var("LIVE_LATENCY_PORT")
+    // Latency calculation lives on c10 in a separate `latency_service`
+    // process. NES on fat-2 still hardcodes 127.0.0.1 for its TCP sink target
+    // (see NodeEngine::getTcpDescriptor), so we keep a local listener here
+    // and forward every accepted byte stream to the remote service.
+    let latency_sink_host =
+        env::var("LATENCY_SINK_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let latency_sink_port: u16 = env::var("LATENCY_SINK_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(9001);
-
-    let (live_tx, _) = tokio::sync::broadcast::channel::<String>(1024);
-    {
-        let live_tx_listen = live_tx.clone();
-        rt.spawn(async move {
-            let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", live_port)).await {
-                Ok(l) => l,
-                Err(e) => {
-                    eprintln!("[live_latency] bind 0.0.0.0:{} failed: {}", live_port, e);
-                    return;
-                }
-            };
-            eprintln!("[live_latency] TCP listener on 0.0.0.0:{}", live_port);
-            loop {
-                let (mut sock, peer) = match listener.accept().await {
-                    Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("[live_latency] accept error: {}", e);
-                        continue;
-                    }
-                };
-                eprintln!("[live_latency] client connected: {}", peer);
-                let mut rx = live_tx_listen.subscribe();
-                tokio::spawn(async move {
-                    use tokio::io::AsyncWriteExt;
-                    loop {
-                        match rx.recv().await {
-                            Ok(line) => {
-                                if sock.write_all(line.as_bytes()).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                eprintln!("[live_latency] client {} lagged by {} frames", peer, n);
-                            }
-                            Err(_) => break,
-                        }
-                    }
-                });
-            }
-        });
-    }
+        .unwrap_or(9501);
+    eprintln!(
+        "[latency-forwarder] target = {}:{}",
+        latency_sink_host, latency_sink_port
+    );
 
     let total_number_of_runs = experiments.len();
     for (index, (experiment, runs)) in experiments.iter_mut().enumerate() {
@@ -228,21 +195,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if let Ok(rest_topology_updater_thread) = rest_topology_updater.start() {
                     print_topology(rest_port).unwrap();
 
-                    let desired_line_count = experiment.total_number_of_tuples_to_emit;
-
-                    let line_count = AtomicUsize::new(0);
-                    let line_count = Arc::new(line_count);
-
                     let file_path = format!(
                         "{}_run:{}.csv",
                         &experiment.experiment_output_path.to_str().unwrap(),
                         attempt
                     );
 
-                    let sink = Arc::new(Mutex::new(LiveLatencySink::new_tcp(live_tx.clone())));
-
-                    let completed_threads = AtomicUsize::new(0);
-                    let completed_threads = Arc::new(completed_threads);
+                    let completed_threads = Arc::new(AtomicUsize::new(0));
                     let query_string = experiment.input_config.parameters.query_string.clone();
 
                     let query_strings = build_query_strings(
@@ -254,15 +213,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
 
                     dbg!(&query_strings);
-                    let desired_line_count_per_thread =
-                        experiment.total_number_of_tuples_to_emit / query_strings.len() as u64;
                     std::thread::sleep(Duration::from_secs(10));
+
+                    let latency_sink_host = latency_sink_host.clone();
 
                     rt.block_on(async {
                         let listener =
                             tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                         let listener_port = listener.local_addr().unwrap().port();
-                        println!("Listening for output tuples on port {}", listener_port);
+                        println!(
+                            "Listening for NES output tuples on 127.0.0.1:{} (forwarding to {}:{})",
+                            listener_port, latency_sink_host, latency_sink_port
+                        );
                         let _deployed = task::spawn_blocking(move || {
                             ExperimentSetup::submit_queries(listener_port, query_strings).is_ok()
                         });
@@ -273,41 +235,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     || num_spawned == 0)
                             {
                                 let reconnect_timout = Duration::from_secs(20);
-                                let timeout_duration = experiment_duration;
                                 let accept_result =
                                     timeout(reconnect_timout, listener.accept()).await;
 
                                 match accept_result {
-                                    Ok(Ok((stream, _))) => {
-                                        let sink_clone = sink.clone();
-                                        let line_count_clone = line_count.clone();
-                                        let shutdown_triggered_clone =
-                                            shutdown_triggered.clone();
-                                        let experiment_start_clone = experiment_start.clone();
-                                        let _timeout_duration_clone = timeout_duration.clone();
-                                        let desired_line_count_copy = desired_line_count;
-                                        let completed_threads_clone = completed_threads.clone();
+                                    Ok(Ok((stream, peer))) => {
+                                        let target = format!(
+                                            "{}:{}",
+                                            latency_sink_host, latency_sink_port
+                                        );
+                                        let completed_threads_clone =
+                                            completed_threads.clone();
                                         num_spawned += 1;
                                         tokio::spawn(async move {
-                                            if let Err(e) = handle_connection(
-                                                stream,
-                                                line_count_clone,
-                                                desired_line_count_per_thread,
-                                                desired_line_count_copy,
-                                                sink_clone.clone(),
-                                                shutdown_triggered_clone,
-                                                experiment_start_clone,
-                                                timeout_duration,
-                                                simulation_config.output_type,
-                                                simulation_config.experiment_type,
+                                            forward_to_latency_service(
+                                                stream, peer, target,
                                             )
-                                            .await
-                                            {
-                                                eprintln!(
-                                                    "Error handling connection: {}",
-                                                    e
-                                                );
-                                            }
+                                            .await;
                                             completed_threads_clone
                                                 .fetch_add(1, Ordering::SeqCst);
                                         });
@@ -333,19 +277,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     if completed_threads.load(SeqCst) == num_spawned
                                         && num_spawned > 0
                                         || elapsed_time > experiment_duration * 10
-                                        || line_count.load(SeqCst)
-                                            >= desired_line_count as usize
                                         || shutdown_triggered.load(Ordering::SeqCst)
                                     {
-                                        println!("flushing live latency sink");
-                                        sink.lock()
-                                            .unwrap()
-                                            .flush()
-                                            .expect("live latency sink flush failed");
                                         break;
                                     }
                                     println!(
-                                        "timeout not reached, waiting for tuples to be written"
+                                        "timeout not reached, waiting for forwarders to drain"
                                     );
                                     println!(
                                         "{} threads of {} completed",
@@ -357,27 +294,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                             }
                         }
                     });
-                    if line_count.load(SeqCst) < desired_line_count as usize {
-                        let mut error_file = OpenOptions::new()
-                            .append(true)
-                            .create(true)
-                            .open(&output_directory.join("error.csv"))
-                            .unwrap();
-                        let error_string = format!(
-                            "{},{},{},{}\n",
-                            experiment
-                                .generated_folder
-                                .to_str()
-                                .ok_or("Could not convert output directory to string")?,
-                            attempt,
-                            line_count.load(SeqCst),
-                            desired_line_count
-                        );
-                        println!("Writing error string: {}", error_string);
-                        error_file
-                            .write_all(error_string.as_bytes())
-                            .expect("Error while writing error message to file");
-                    }
                     experiment.kill_processes()?;
                     source_input_server_process.kill()?;
                     let current_time = SystemTime::now();
@@ -388,18 +304,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                         attempt,
                         current_time.duration_since(experiment_start)
                     );
-                    let tuple_count_string = format!(
-                        "{},{},{}\n",
-                        attempt,
-                        line_count.load(SeqCst),
-                        desired_line_count
-                    );
-                    let tuple_count_path = file_path.clone().add("tuple_count.csv");
-                    let mut tuple_count_file =
-                        File::create(PathBuf::from(tuple_count_path)).unwrap();
-                    tuple_count_file
-                        .write_all(tuple_count_string.as_bytes())
-                        .expect("Error while writing tuple count to file");
                     let actual_reconnect_calls = rest_topology_updater_thread.join().unwrap();
                     let reconnect_list_path = file_path.clone().add("reconnects.csv");
                     let mut reconnect_list_file =
@@ -414,7 +318,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 .as_bytes(),
                         )
                         .expect("Error while writing reconnect list to file");
-                    println!("Live latency mode: skipping notebook analysis (no Avro file produced)");
+                    println!("Live latency tracked by latency_service; no Avro file produced here");
                     if shutdown_triggered.load(Ordering::SeqCst) {
                         break;
                     }
@@ -427,8 +331,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             experiment.kill_processes()?;
-            let subscribers = live_tx.send("{\"eof\":true}\n".to_string()).unwrap_or(0);
-            eprintln!("[live_latency] emitted eof marker (subscribers={})", subscribers);
             let wait_time = 30;
             println!(
                 "Finished run sleeping {} seconds before next run",
@@ -449,4 +351,37 @@ fn main() -> Result<(), Box<dyn Error>> {
         sleep(Duration::from_secs(wait_time));
     }
     Ok(())
+}
+
+/// Pump bytes from an inbound NES connection to the remote `latency_service`.
+/// Each accepted NES connection becomes one outbound TCP connection to c10.
+async fn forward_to_latency_service(
+    mut inbound: tokio::net::TcpStream,
+    peer: std::net::SocketAddr,
+    target: String,
+) {
+    match tokio::net::TcpStream::connect(&target).await {
+        Ok(mut outbound) => {
+            eprintln!(
+                "[latency-forwarder] {} -> {} connected",
+                peer, target
+            );
+            match tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await {
+                Ok((up, down)) => eprintln!(
+                    "[latency-forwarder] {} -> {} closed (up={} down={} bytes)",
+                    peer, target, up, down
+                ),
+                Err(e) => eprintln!(
+                    "[latency-forwarder] {} -> {} copy error: {}",
+                    peer, target, e
+                ),
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "[latency-forwarder] {} -> {} connect failed: {}",
+                peer, target, e
+            );
+        }
+    }
 }

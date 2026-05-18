@@ -1,0 +1,13 @@
+[package]
+name = "latency_service"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "latency_service"
+path = "src/main.rs"
+
+[dependencies]
+simulation_runner_rs = { path = ".." }
+tokio = { version = "1.28.2", features = ["full"] }
+serde_json = "1"

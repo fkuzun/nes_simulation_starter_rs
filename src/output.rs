@@ -34,7 +34,7 @@ pub struct OutputTuple {
 }
 
 impl OutputTuple {
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut cursor = Cursor::new(bytes);
         let win_start = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let win_end = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
@@ -89,7 +89,7 @@ pub struct OutputTupleStateless {
 }
 
 impl OutputTupleStateless {
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut cursor = Cursor::new(bytes);
         let id = byteorder::ReadBytesExt::read_u64::<LittleEndian>(&mut cursor).unwrap();
         let sequence_number =

@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "daemon"]
+members = [".", "daemon", "latency_service"]
 
 [package]
 name = "simulation_runner_rs"
