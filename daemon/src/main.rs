@@ -224,7 +224,7 @@ fn render_toml(template: &str, folder: &PathBuf, req: &StartReq) -> Result<Strin
 
     let (enable_reconfig, enable_proactive) = match reconfig {
         "holistic" => (false, false),
-        "incremental" => (true, true),
+        "incremental" => (true, false),
         other => return Err(format!("unknown reconfigMode: {}", other)),
     };
 
