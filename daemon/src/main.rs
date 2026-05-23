@@ -323,17 +323,54 @@ async fn start_handler(
         }
     }
 
+    let sim_type = match req.query_mode.as_deref() {
+        Some("stateful") => "STATEFUL".to_string(),
+        Some("stateless") => "STATELESS".to_string(),
+        Some(other) => {
+            error!("unknown queryMode: {}", other);
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"ok": false, "error": format!("unknown queryMode: {}", other)})),
+            )
+                .into_response();
+        }
+        None => std::env::var("SIM_TYPE").unwrap_or_else(|_| "STATEFUL".to_string()),
+    };
+
+    // Per-mode env var with legacy fallback. e.g. for STATELESS we prefer
+    // SIM_NES_DIR_STATELESS, then fall back to SIM_NES_DIR.
+    let mode_var = |base: &str| -> Option<String> {
+        let suffix = if sim_type == "STATELESS" { "_STATELESS" } else { "_STATEFUL" };
+        std::env::var(format!("{}{}", base, suffix))
+            .ok()
+            .or_else(|| std::env::var(base).ok())
+    };
+
     let sim_bin = match env_required("SIM_BIN") {
         Ok(v) => v,
         Err((s, m)) => { error!("SIM_BIN not set"); return (s, m).into_response(); }
     };
-    let sim_nes_dir = match env_required("SIM_NES_DIR") {
-        Ok(v) => v,
-        Err((s, m)) => { error!("SIM_NES_DIR not set"); return (s, m).into_response(); }
+    let sim_nes_dir = match mode_var("SIM_NES_DIR") {
+        Some(v) => v,
+        None => {
+            error!("neither SIM_NES_DIR_{} nor SIM_NES_DIR is set", if sim_type == "STATELESS" { "STATELESS" } else { "STATEFUL" });
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("no NES build dir configured for sim_type={}", sim_type)})),
+            )
+                .into_response();
+        }
     };
-    let sim_toml = match env_required("SIM_TOML") {
-        Ok(v) => v,
-        Err((s, m)) => { error!("SIM_TOML not set"); return (s, m).into_response(); }
+    let sim_toml = match mode_var("SIM_TOML") {
+        Some(v) => v,
+        None => {
+            error!("neither SIM_TOML_{} nor SIM_TOML is set", if sim_type == "STATELESS" { "STATELESS" } else { "STATEFUL" });
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"ok": false, "error": format!("no template TOML configured for sim_type={}", sim_type)})),
+            )
+                .into_response();
+        }
     };
     let sim_output_dir = match env_required("SIM_OUTPUT_DIR") {
         Ok(v) => v,
@@ -358,20 +395,6 @@ async fn start_handler(
     };
     let latency_sink_port =
         std::env::var("LATENCY_SINK_PORT").unwrap_or_else(|_| "9501".to_string());
-
-    let sim_type = match req.query_mode.as_deref() {
-        Some("stateful") => "STATEFUL".to_string(),
-        Some("stateless") => "STATELESS".to_string(),
-        Some(other) => {
-            error!("unknown queryMode: {}", other);
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"ok": false, "error": format!("unknown queryMode: {}", other)})),
-            )
-                .into_response();
-        }
-        None => std::env::var("SIM_TYPE").unwrap_or_else(|_| "STATEFUL".to_string()),
-    };
 
     let template_path = PathBuf::from(&sim_toml);
     let exp_root = match template_path.parent().map(|p| p.to_path_buf()) {
