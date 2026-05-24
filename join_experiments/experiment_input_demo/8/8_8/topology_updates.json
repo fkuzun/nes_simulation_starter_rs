@@ -1,0 +1,1738 @@
+{
+  "initial_parents": [
+    [
+      2,
+      10
+    ],
+    [
+      2,
+      11
+    ],
+    [
+      3,
+      12
+    ],
+    [
+      3,
+      13
+    ],
+    [
+      4,
+      14
+    ],
+    [
+      4,
+      15
+    ],
+    [
+      5,
+      16
+    ],
+    [
+      5,
+      17
+    ]
+  ],
+  "topology_updates": [
+    {
+      "timestamp": 0,
+      "events": [
+        {
+          "parentId": 2,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 1,
+      "events": [
+        {
+          "parentId": 3,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 2,
+      "events": [
+        {
+          "parentId": 4,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 3,
+      "events": [
+        {
+          "parentId": 5,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 4,
+      "events": [
+        {
+          "parentId": 6,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 5,
+      "events": [
+        {
+          "parentId": 7,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 6,
+      "events": [
+        {
+          "parentId": 8,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 7,
+      "events": [
+        {
+          "parentId": 9,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 8,
+      "events": [
+        {
+          "parentId": 2,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 9,
+      "events": [
+        {
+          "parentId": 3,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 10,
+      "events": [
+        {
+          "parentId": 4,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 11,
+      "events": [
+        {
+          "parentId": 5,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 12,
+      "events": [
+        {
+          "parentId": 6,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 13,
+      "events": [
+        {
+          "parentId": 7,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 14,
+      "events": [
+        {
+          "parentId": 8,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 15,
+      "events": [
+        {
+          "parentId": 9,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 16,
+      "events": [
+        {
+          "parentId": 2,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 17,
+      "events": [
+        {
+          "parentId": 3,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 18,
+      "events": [
+        {
+          "parentId": 4,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 19,
+      "events": [
+        {
+          "parentId": 5,
+          "childId": 10,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 10,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 11,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 11,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 12,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 12,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 13,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 13,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 14,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 14,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 15,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 15,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 16,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 16,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 17,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 17,
+          "action": "add"
+        }
+      ]
+    }
+  ]
+}

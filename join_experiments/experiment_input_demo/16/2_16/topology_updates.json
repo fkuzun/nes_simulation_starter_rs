@@ -1,0 +1,514 @@
+{
+  "initial_parents": [
+    [
+      2,
+      18
+    ],
+    [
+      2,
+      19
+    ]
+  ],
+  "topology_updates": [
+    {
+      "timestamp": 0,
+      "events": [
+        {
+          "parentId": 2,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 1,
+      "events": [
+        {
+          "parentId": 3,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 2,
+      "events": [
+        {
+          "parentId": 4,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 3,
+      "events": [
+        {
+          "parentId": 5,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 4,
+      "events": [
+        {
+          "parentId": 6,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 6,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 7,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 5,
+      "events": [
+        {
+          "parentId": 7,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 7,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 8,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 6,
+      "events": [
+        {
+          "parentId": 8,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 8,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 9,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 7,
+      "events": [
+        {
+          "parentId": 9,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 10,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 9,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 10,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 8,
+      "events": [
+        {
+          "parentId": 10,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 11,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 10,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 11,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 9,
+      "events": [
+        {
+          "parentId": 11,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 12,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 11,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 12,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 10,
+      "events": [
+        {
+          "parentId": 12,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 13,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 12,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 13,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 11,
+      "events": [
+        {
+          "parentId": 13,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 14,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 13,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 14,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 12,
+      "events": [
+        {
+          "parentId": 14,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 15,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 14,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 15,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 13,
+      "events": [
+        {
+          "parentId": 15,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 16,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 15,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 16,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 14,
+      "events": [
+        {
+          "parentId": 16,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 17,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 16,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 17,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 15,
+      "events": [
+        {
+          "parentId": 17,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 17,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 2,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 16,
+      "events": [
+        {
+          "parentId": 2,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 2,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 3,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 17,
+      "events": [
+        {
+          "parentId": 3,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 3,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 4,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 18,
+      "events": [
+        {
+          "parentId": 4,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 4,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 5,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    },
+    {
+      "timestamp": 19,
+      "events": [
+        {
+          "parentId": 5,
+          "childId": 18,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 18,
+          "action": "add"
+        },
+        {
+          "parentId": 5,
+          "childId": 19,
+          "action": "remove"
+        },
+        {
+          "parentId": 6,
+          "childId": 19,
+          "action": "add"
+        }
+      ]
+    }
+  ]
+}
