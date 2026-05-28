@@ -747,6 +747,16 @@ async fn stop_handler(State(state): State<AppState>) -> impl IntoResponse {
     Json(StopResponse { ok: true }).into_response()
 }
 
+async fn restart_handler(
+    State(state): State<AppState>,
+    Json(req): Json<StartReq>,
+) -> impl IntoResponse {
+    info!("POST /restart received: {:?}", req);
+    // Run stop then start; discard the stop response and propagate start's.
+    let _ = stop_handler(State(state.clone())).await.into_response();
+    start_handler(State(state), Json(req)).await.into_response()
+}
+
 async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
     info!("GET /status received");
 
@@ -945,6 +955,7 @@ async fn main() {
     let app = Router::new()
         .route("/start", post(start_handler))
         .route("/stop", post(stop_handler))
+        .route("/restart", post(restart_handler))
         .route("/status", get(status_handler))
         .route("/deployment", get(deployment_handler))
         .route("/healthz", get(healthz_handler))
