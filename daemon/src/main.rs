@@ -951,6 +951,7 @@ async fn main() {
         remote_pid: Arc::new(Mutex::new(None)),
         latency_child: Arc::new(Mutex::new(None)),
     };
+    let shutdown_state = state.clone();
 
     let app = Router::new()
         .route("/start", post(start_handler))
@@ -966,5 +967,38 @@ async fn main() {
         .expect("failed to bind daemon port");
 
     info!("daemon ready, listening on 0.0.0.0:{}", port);
-    axum::serve(listener, app).await.unwrap();
+
+    // Graceful shutdown so SIGINT/SIGTERM (Ctrl-C, `pkill`, undeploy.sh) drains
+    // axum, leaves a log line explaining why we exited, and stops the local
+    // latency_service child instead of leaking it as an orphan.
+    let shutdown = async move {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("failed to install SIGTERM handler: {}", e);
+                return;
+            }
+        };
+        let mut sigint = match signal(SignalKind::interrupt()) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("failed to install SIGINT handler: {}", e);
+                return;
+            }
+        };
+        tokio::select! {
+            _ = sigterm.recv() => info!("received SIGTERM, shutting down"),
+            _ = sigint.recv()  => info!("received SIGINT, shutting down"),
+        }
+        stop_latency_service(&shutdown_state.latency_child);
+    };
+
+    if let Err(e) = axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await
+    {
+        error!("axum::serve exited with error: {}", e);
+    }
+    info!("daemon exit");
 }
