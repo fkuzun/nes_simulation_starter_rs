@@ -92,12 +92,13 @@ impl LiveLatencySink {
     }
 
     pub fn record_stateful(&mut self, t: &OutputTuple) -> io::Result<()> {
-        let event_ns = t.event_time_1.max(t.event_time_2);
-        if t.emission_time_1 < event_ns {
+        let event_ns = t.event_time_1.min(t.event_time_2);
+        let emission_ns = t.emission_time_1.max(t.emission_time_2);
+        if emission_ns < event_ns {
             return Ok(());
         }
-        let lat_ns = t.emission_time_1 - event_ns;
-        self.record(t.emission_time_1, lat_ns)
+        let lat_ns = emission_ns - event_ns;
+        self.record(emission_ns, lat_ns)
     }
 
     pub fn record_stateless(&mut self, t: &OutputTupleStateless) -> io::Result<()> {
